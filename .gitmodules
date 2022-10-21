@@ -1,0 +1,3 @@
+[submodule "gfd"]
+	path = gfd
+	url = git@github.com:juolrabi/gfd.git
