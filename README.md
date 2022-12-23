@@ -2,9 +2,9 @@
 
 This repository contains research work for Mikael Myyrä's master's thesis,
 using Jukka Räbinä's mesh generator and Discrete Exterior Calculus solver [gfd]
-and similar Python library by Nathan Bell and Anil N. Hirani [PyDEC]. No
-10-sided polygons here, I just can't name anything without making it a pun
-somehow.
+and prototyped using the similar Python library [PyDEC] by Nathan Bell and Anil
+N. Hirani. No 10-sided polygons here, I just can't name anything without making
+it a pun somehow.
 
 ## Contents
 

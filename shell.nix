@@ -12,11 +12,13 @@ let
       sha256 = "cntqN1k7KzOwgPs1GPN66asbtbsRrdNYYG9KylmBx9s=";
     };
   };
-  python = pkgs.python3.withPackages (ps: with ps; [
-    numpy
-    scipy
-    matplotlib
+  python = pkgs.python3.withPackages (ps: [
     gmshPy
+    ps.numpy
+    ps.scipy
+    ps.matplotlib
+
+    ps.black
   ]);
 in
 pkgs.mkShell {
@@ -45,5 +47,6 @@ pkgs.mkShell {
       "${libXfixes}/lib"
       "${libXft}/lib"
       "${libXinerama}/lib"
+      "${pkgs.stdenv.cc.cc.lib}/lib64"
     ]);
 }
