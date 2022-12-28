@@ -24,7 +24,7 @@ solution
 import numpy as np
 from scipy.sparse import diags
 import matplotlib.pyplot as plt
-from gmesh_recmesh import makerec, reqrecMsh
+import mesh
 from pydec import simplicial_complex
 
 Nxy = 10
@@ -38,7 +38,9 @@ bt = 4.5
 Nt = 50
 dt = bt / Nt
 
-V, E = makerec(bxy, bxy, dxy)
+cmp_mesh = mesh.rect_unstructured(bxy, bxy, dxy)
+V = cmp_mesh.vertices
+E = cmp_mesh.edges
 # V = np.loadtxt("C:\MyTemp\cpp\Samples\MeshGeneration2\\build\\vert.txt")*np.pi
 # E = np.loadtxt("C:\MyTemp\cpp\Samples\MeshGeneration2\\build\\tria.txt",dtype='int32')
 sc = simplicial_complex(V, E)
