@@ -152,15 +152,14 @@ def _plot_test_cases():
 
     plt.figure(figsize=(8, 8), dpi=80)
     mesh = rect_uniform(1, 1, 0.3)
-    plt.triplot(mesh.vertices[:, 0], mesh.vertices[:, 1], mesh.edges)
+    plt.triplot(mesh.vertices[:, 0], mesh.vertices[:, 1], mesh.indices)
     plt.show()
 
     # unstructured triangle mesh
 
     mesh = rect_unstructured(np.pi, np.pi, 0.3)
-    sc = mesh.as_pydec_mesh()
     plt.figure(figsize=(8, 8), dpi=80)
-    plt.triplot(sc.vertices[:, 0], sc.vertices[:, 1], sc.indices)
+    plt.triplot(mesh.vertices[:, 0], mesh.vertices[:, 1], mesh.indices)
     plt.show()
 
     # more complex case with local refinement,
