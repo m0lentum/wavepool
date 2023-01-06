@@ -5,17 +5,16 @@ import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d as plt3d
 import numpy as np
 import numpy.typing as npt
+import pydec
 from abc import ABC
 from abc import abstractmethod
 from dataclasses import dataclass
-
-from mesh import Mesh
 
 
 @dataclass(init=False)
 class Simulation(ABC):
     # parameters
-    mesh: Mesh
+    mesh: pydec.SimplicialMesh
     dt: float
     step_count: int
     zlim: list[float]
@@ -24,7 +23,9 @@ class Simulation(ABC):
     ax: plt3d.Axes3D
     anim: plt_anim.FuncAnimation
 
-    def __init__(self, mesh: Mesh, dt: float, step_count: int, zlim: list[float]):
+    def __init__(
+        self, mesh: pydec.SimplicialMesh, dt: float, step_count: int, zlim: list[float]
+    ):
         self.mesh = mesh
         self.dt = dt
         self.step_count = step_count

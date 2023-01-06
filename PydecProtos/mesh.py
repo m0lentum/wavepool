@@ -3,37 +3,13 @@ Functions for creating meshes with gmsh.
 Originally by Joona Räty, modified by Mikael Myyrä.
 """
 
-from dataclasses import dataclass
-
 import gmsh
 import matplotlib.pyplot as plt
 import numpy as np
-import numpy.typing as npt
 import pydec
 
 
-# TODO: functions here could probably return a pydec.SimplicialMesh directly
-# instead of this intermediate type
-@dataclass
-class Mesh:
-    """Mesh containing an array of vertex positions
-    and an index array defining edges between them."""
-
-    vertices: npt.NDArray[np.float64]
-    edges: npt.NDArray[np.int32]
-
-    def as_pydec_complex(self) -> pydec.SimplicialComplex:
-        """Build a PyDEC simplicial complex based on the mesh."""
-
-        return pydec.SimplicialComplex(self.vertices, self.edges)
-
-    def as_pydec_mesh(self) -> pydec.SimplicialMesh:
-        """Build a PyDEC simplicial mesh based on the mesh."""
-
-        return pydec.SimplicialMesh(self.vertices, self.edges)
-
-
-def rect_unstructured(mesh_width, mesh_height, tri_radius) -> Mesh:
+def rect_unstructured(mesh_width, mesh_height, tri_radius) -> pydec.SimplicialMesh:
     """Create a rectangular triangle mesh with nonuniform triangle placement."""
 
     gmsh.initialize()
@@ -67,10 +43,10 @@ def rect_unstructured(mesh_width, mesh_height, tri_radius) -> Mesh:
     E = np.reshape(c, (int(len(c[0]) / 3), 3)) - 1
 
     gmsh.finalize()
-    return Mesh(vertices=V, edges=E.astype("int32"))
+    return pydec.SimplicialMesh(vertices=V, indices=E.astype("int32"))
 
 
-def rect_uniform(mesh_width, mesh_height, tri_radius) -> Mesh:
+def rect_uniform(mesh_width, mesh_height, tri_radius) -> pydec.SimplicialMesh:
     """Create a rectangular triangle mesh with uniform triangle size and alignment."""
 
     nx = int(np.ceil(mesh_width / tri_radius)) + 1
@@ -99,10 +75,12 @@ def rect_uniform(mesh_width, mesh_height, tri_radius) -> Mesh:
         else:
             row = RE[1:] + int((i - 1) / 2) * (2 * nx + 1) + nx
         E = np.vstack((E, row))
-    return Mesh(vertices=V, edges=E.astype("int32"))
+    return pydec.SimplicialMesh(V, E.astype("int32"))
 
 
-def cube_unstructured(mesh_dim_x, mesh_dim_y, mesh_dim_z, tri_radius) -> Mesh:
+def cube_unstructured(
+    mesh_dim_x, mesh_dim_y, mesh_dim_z, tri_radius
+) -> pydec.SimplicialMesh:
     """Create a 3D unstructured simplex mesh in the shape of a cube.
 
     Currently unused."""
@@ -164,7 +142,7 @@ def cube_unstructured(mesh_dim_x, mesh_dim_y, mesh_dim_z, tri_radius) -> Mesh:
     E = np.reshape(c, (int(len(c[0]) / 4), 4)) - 1
 
     gmsh.finalize()
-    return Mesh(vertices=V, edges=E.astype("int32"))
+    return pydec.SimplicialMesh(V, E.astype("int32"))
 
 
 def _plot_test_cases():

@@ -40,7 +40,7 @@ dt = bt / Nt
 
 cmp_mesh = mesh.rect_unstructured(bxy, bxy, dxy)
 V = cmp_mesh.vertices
-E = cmp_mesh.edges
+E = cmp_mesh.indices
 # V = np.loadtxt("C:\MyTemp\cpp\Samples\MeshGeneration2\\build\\vert.txt")*np.pi
 # E = np.loadtxt("C:\MyTemp\cpp\Samples\MeshGeneration2\\build\\tria.txt",dtype='int32')
 sc = simplicial_complex(V, E)
