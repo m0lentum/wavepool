@@ -1,12 +1,12 @@
 """
 Vibrating rectangular membrane simulated with leapfrog time discretization
-and Dirichlet boundary condition u = 0.
+and Dirichlet boundary condition ɸ = 0.
 
-Wave equation ∂²u/∂t² - c²∇²u = f
+Wave equation ∂²ɸ/∂t² - c²∇²ɸ = f (where ɸ is velocity potential)
 represented as a first-order system of differential form equations
-with v = ∂u/∂t represented by a 0-form on the primal mesh
-and w = ∇u represented by a 1-form on the primal mesh.
-The boundary condition u = 0 implies v = 0, but w can vary on the boundary.
+with acoustic pressure v = ∂ɸ/∂t represented by a 0-form on the primal mesh
+and particle velocity w = ∇ɸ represented by a 1-form on the primal mesh.
+The boundary condition ɸ = 0 implies v = 0, but w can vary on the boundary.
 
 (TODO: add a .md note to explain in more detail)
 """
@@ -52,14 +52,13 @@ class StandingWave(Simulation):
         super().__init__(mesh=cmp_mesh, dt=dt, step_count=step_count, zlim=[-1.5, 1.5])
 
     def init_state(self):
-        # TODO: initial condition should maybe be specified on u
-        # and then computed from that for v and w? look at papers, how do they do this?
         x_wave_count = 2
         y_wave_count = 3
         self.v = np.sin(x_wave_count * self.mesh.vertices[:, 0]) * np.sin(
             y_wave_count * self.mesh.vertices[:, 1]
         )
-        # TODO: w should be vector-valued, is this working as intended?
+        # w is vector-valued, but represented in DEC as a scalar per mesh edge,
+        # therefore a single scalar per edge here
         self.w = np.zeros(cmp_complex[1].num_simplices)
 
     def step(self):
@@ -67,8 +66,7 @@ class StandingWave(Simulation):
         self.w += self.w_step_mat * self.v
 
     def get_z_data(self):
-        # TODO: what if I want to visualize the original function `u`
-        # from the second-order equation?
+        # visualizing acoustic pressure
         return self.v
 
 
