@@ -1,6 +1,6 @@
 """
 Functions for creating meshes with gmsh.
-Originally by Joona Räty, modified by Mikael Myyrä.
+Originally by Joona Räty, built upon by Mikael Myyrä.
 """
 
 import gmsh
@@ -9,7 +9,9 @@ import numpy as np
 import pydec
 
 
-def rect_unstructured(mesh_width, mesh_height, tri_radius) -> pydec.SimplicialMesh:
+def rect_unstructured(
+    mesh_width: float, mesh_height: float, tri_radius: float
+) -> pydec.SimplicialMesh:
     """Create a rectangular triangle mesh with nonuniform triangle placement."""
 
     gmsh.initialize()
@@ -35,18 +37,12 @@ def rect_unstructured(mesh_width, mesh_height, tri_radius) -> pydec.SimplicialMe
     # gmsh.model.mesh.refine()
     # gmsh.model.mesh.optimize("Laplace2D")
 
-    b = gmsh.model.mesh.getNodes()[1]
-    B = np.reshape(b, (int(len(b) / 3), 3))
-    V = np.delete(B, 2, 1)
-
-    c = np.array(gmsh.model.mesh.getElements(2)[2])
-    E = np.reshape(c, (int(len(c[0]) / 3), 3)) - 1
-
-    gmsh.finalize()
-    return pydec.SimplicialMesh(vertices=V, indices=E.astype("int32"))
+    return _finalize_mesh_2d()
 
 
-def rect_uniform(mesh_width, mesh_height, tri_radius) -> pydec.SimplicialMesh:
+def rect_uniform(
+    mesh_width: float, mesh_height: float, tri_radius: float
+) -> pydec.SimplicialMesh:
     """Create a rectangular triangle mesh with uniform triangle size and alignment."""
 
     nx = int(np.ceil(mesh_width / tri_radius)) + 1
@@ -78,8 +74,35 @@ def rect_uniform(mesh_width, mesh_height, tri_radius) -> pydec.SimplicialMesh:
     return pydec.SimplicialMesh(V, E.astype("int32"))
 
 
+def annulus(inner_r: float, outer_r: float, refine_count: int) -> pydec.SimplicialMesh:
+    """Create a 2D unstructured mesh in the shape of an annulus,
+    i.e. the area between two concentric circles, or a disk with a hole in the middle.
+
+    Note: I can't figure out how to set a maximum element size for gmsh using circle
+    curves, so taking a refinement level as parameter instead for now"""
+
+    gmsh.initialize()
+    gmsh.model.add("annulus")
+
+    inner_circ = gmsh.model.occ.addCircle(0, 0, 0, inner_r)
+    outer_circ = gmsh.model.occ.addCircle(0, 0, 0, outer_r)
+    inner_loop = gmsh.model.occ.addCurveLoop([inner_circ])
+    outer_loop = gmsh.model.occ.addCurveLoop([outer_circ])
+    gmsh.model.occ.addPlaneSurface([outer_loop, inner_loop])
+
+    gmsh.model.occ.synchronize()
+    gmsh.model.mesh.generate(dim=2)
+    for _ in range(refine_count):
+        gmsh.model.mesh.refine()
+
+    return _finalize_mesh_2d()
+
+
 def cube_unstructured(
-    mesh_dim_x, mesh_dim_y, mesh_dim_z, tri_radius
+    mesh_dim_x: float,
+    mesh_dim_y: float,
+    mesh_dim_z: float,
+    tri_radius: float,
 ) -> pydec.SimplicialMesh:
     """Create a 3D unstructured simplex mesh in the shape of a cube.
 
@@ -140,6 +163,20 @@ def cube_unstructured(
 
     c = np.array(gmsh.model.mesh.getElements(3)[2])
     E = np.reshape(c, (int(len(c[0]) / 4), 4)) - 1
+
+    gmsh.finalize()
+    return pydec.SimplicialMesh(V, E.astype("int32"))
+
+
+def _finalize_mesh_2d() -> pydec.SimplicialMesh:
+    """Get the active mesh from gmsh and transform it to a PyDEC 2D mesh."""
+
+    b = gmsh.model.mesh.getNodes()[1]
+    B = np.reshape(b, (int(len(b) / 3), 3))
+    V = np.delete(B, 2, 1)
+
+    c = np.array(gmsh.model.mesh.getElements(2)[2])
+    E = np.reshape(c, (int(len(c[0]) / 3), 3)) - 1
 
     gmsh.finalize()
     return pydec.SimplicialMesh(V, E.astype("int32"))
