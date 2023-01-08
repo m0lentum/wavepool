@@ -43,7 +43,8 @@ class Simulation(ABC):
 
     @abstractmethod
     def init_state(self):
-        """Set up the initial conditions for the simulation."""
+        """Set up the initial conditions for the simulation state.
+        For constants you should use `__init__` (or global scope) instead."""
         pass
 
     @abstractmethod
@@ -63,6 +64,7 @@ class Simulation(ABC):
             self.mesh.vertices[:, 0],
             self.mesh.vertices[:, 1],
             self.get_z_data(),
+            triangles=self.mesh.indices,
             cmap="viridis",
             edgecolor="none",
         )

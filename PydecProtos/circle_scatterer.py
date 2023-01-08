@@ -11,16 +11,95 @@ import mesh
 from sim_runner import Simulation
 
 import numpy as np
+import math
 import matplotlib.pyplot as plt
 import pydec
 
 scatterer_radius = 1.0
-outer_edge_radius = 2.0
+outer_edge_radius = 3.0
 
 cmp_mesh = mesh.annulus(scatterer_radius, outer_edge_radius, refine_count=1)
+cmp_complex = pydec.SimplicialComplex(cmp_mesh)
 plt.triplot(cmp_mesh.vertices[:, 0], cmp_mesh.vertices[:, 1], cmp_mesh.indices)
 plt.show()
 
-inc_wavenumber = 3.0
-inc_wave_dir = np.array([0.0, 1.0])
-inc_wave_vector = inc_wavenumber * inc_wave_dir
+
+# gather sets of inner and outer boundary edges & vertices
+# for applying different boundary conditions to each
+inner_bound_verts = []
+inner_bound_edges = []
+outer_bound_verts = []
+outer_bound_edges = []
+# distinguish between boundaries by checking squared distance from origin
+# (TODO: can we label these somehow with gmsh instead?
+# this won't work for more complicated mesh shapes)
+middle_dist_sq = ((outer_edge_radius + scatterer_radius) / 2.0) ** 2
+for edge in cmp_complex.boundary():
+    edge_verts = edge.boundary()
+    test_vert = cmp_mesh.vertices[cmp_complex[0].simplex_to_index.get(edge_verts[0])]
+    if np.dot(test_vert, test_vert) < middle_dist_sq:
+        inner_bound_edges.append(edge)
+        inner_bound_verts.extend(edge_verts)
+    else:
+        outer_bound_edges.append(edge)
+        outer_bound_verts.extend(edge_verts)
+# remove duplicates by constructing sets
+inner_bound_verts = set(inner_bound_verts)
+inner_bound_edges = set(inner_bound_edges)
+outer_bound_verts = set(outer_bound_verts)
+outer_bound_edges = set(outer_bound_edges)
+
+
+class CircleScatterer(Simulation):
+    def __init__(self):
+        # incoming wave parameters
+        inc_wavenumber = 1.0
+        inc_wave_dir = np.array([0.0, 1.0])
+        self.inc_wave_vector = inc_wavenumber * inc_wave_dir
+        self.inc_angular_vel = 1.0
+
+        # time parameters
+        sim_time = 2.0 * np.pi
+        dt = 1.0 / 20.0
+        step_count = math.ceil(sim_time / dt)
+
+        # time stepping matrices
+        self.v_step_mat = (
+            -dt * cmp_complex[0].star_inv * cmp_complex[0].d.T * cmp_complex[1].star
+        )
+        self.w_step_mat = dt * cmp_complex[0].d
+
+        super().__init__(mesh=cmp_mesh, dt=dt, step_count=step_count, zlim=[-3.0, 3.0])
+
+    def init_state(self):
+        # time needed for incoming wave evaluation
+        self.t = 0.0
+
+        self.v = np.zeros(cmp_complex[0].num_simplices)
+        for vert_idx in range(len(self.v)):
+            self.v[vert_idx] = -self.inc_angular_vel * math.sin(
+                np.dot(self.inc_wave_vector, self.mesh.vertices[vert_idx, :])
+            )
+        # TODO: setting values for this requires integration over edges, figure it out
+        self.w = np.zeros(cmp_complex[1].num_simplices)
+
+    def step(self):
+        self.t += self.dt
+        self.v += self.v_step_mat * self.w
+        # inner edge boundary condition (i.e. incoming wave) for v
+        for bound_vert in inner_bound_verts:
+            vert_idx = cmp_complex[0].simplex_to_index.get(bound_vert)
+            self.v[vert_idx] = -self.inc_angular_vel * math.sin(
+                self.inc_angular_vel * self.t
+                - np.dot(self.inc_wave_vector, cmp_mesh.vertices[vert_idx])
+            )
+        self.w += self.w_step_mat * self.v
+        # TODO: inner boundary condition for w and outer boundary condition for both variables
+
+    def get_z_data(self):
+        # visualizing acoustic pressure
+        return self.v
+
+
+sim = CircleScatterer()
+sim.show()
