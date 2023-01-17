@@ -17,9 +17,6 @@ from sim_runner import Simulation
 import numpy as np
 import pydec
 
-# shared mesh for all simulations in this file
-# (TODO: load mesh from file to avoid work regenerating every time)
-
 mesh_dim = np.pi
 verts_per_side = 20
 mesh_scale = mesh_dim / verts_per_side
