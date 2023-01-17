@@ -79,8 +79,8 @@ class CircleScatterer(Simulation):
         self.v = np.zeros(cmp_complex[0].num_simplices)
         for vert_idx in range(len(self.v)):
             # time derivative of the incoming wave
-            self.v[vert_idx] = -self.inc_angular_vel * math.sin(
-                np.dot(self.inc_wave_vector, self.mesh.vertices[vert_idx, :])
+            self.v[vert_idx] = self.inc_angular_vel * math.sin(
+                -np.dot(self.inc_wave_vector, self.mesh.vertices[vert_idx, :])
             )
         self.w = np.zeros(cmp_complex[1].num_simplices)
         for edge_idx in range(len(self.w)):
@@ -93,7 +93,7 @@ class CircleScatterer(Simulation):
         # inner edge boundary condition (i.e. incoming wave) for v
         for bound_vert in inner_bound_verts:
             vert_idx = cmp_complex[0].simplex_to_index.get(bound_vert)
-            self.v[vert_idx] = -self.inc_angular_vel * math.sin(
+            self.v[vert_idx] = self.inc_angular_vel * math.sin(
                 self.inc_angular_vel * self.t
                 - np.dot(self.inc_wave_vector, cmp_mesh.vertices[vert_idx])
             )
