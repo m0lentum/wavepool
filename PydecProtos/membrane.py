@@ -12,6 +12,7 @@ The boundary condition ɸ = 0 implies v = 0, but w can vary on the boundary.
 """
 
 import mesh
+import animate as anim
 from sim_runner import Simulation
 
 import numpy as np
@@ -47,7 +48,7 @@ class StandingWave(Simulation):
 
         self.v_step_mat = v_step_mat
         self.w_step_mat = w_step_mat
-        super().__init__(mesh=cmp_mesh, dt=dt, step_count=step_count, zlim=[-1.5, 1.5])
+        super().__init__(mesh=cmp_mesh, dt=dt, step_count=step_count)
 
     def init_state(self):
         x_wave_count = 2
@@ -63,10 +64,6 @@ class StandingWave(Simulation):
         self.v += self.v_step_mat * self.w
         self.w += self.w_step_mat * self.v
 
-    def get_z_data(self):
-        # visualizing acoustic pressure
-        return self.v
-
 
 # another simulation with the same equations but different initial conditions
 class MovingWave(StandingWave):
@@ -78,8 +75,10 @@ class MovingWave(StandingWave):
 
 
 sim1 = StandingWave()
-sim1.show()
+sim1_vis = anim.ZeroForm(sim=sim1, get_data=lambda s: s.v, zlim=[-1.5, 1.5])
+sim1_vis.show()
 
 sim2 = MovingWave()
-sim2.show()
-# sim2.save_mp4()
+sim2_vis = anim.ZeroForm(sim=sim2, get_data=lambda s: s.v, zlim=[-1.5, 1.5])
+sim2_vis.show()
+# sim2_vis.save_mp4()

@@ -7,6 +7,7 @@ mesh is refined and timestep shortened.
 """
 
 import mesh
+import animate as anim
 from sim_runner import Simulation
 
 import numpy as np
@@ -55,7 +56,7 @@ class AccuracyTest(Simulation):
         )
         self.w_step_mat = dt * self.cmp_complex[0].d
 
-        super().__init__(mesh=cmp_mesh, dt=dt, step_count=step_count, zlim=[-8.0, 8.0])
+        super().__init__(mesh=cmp_mesh, dt=dt, step_count=step_count)
 
     def init_state(self):
         # time needed for incoming wave evaluation
@@ -142,8 +143,10 @@ class AccuracyTest(Simulation):
 
 div_counts = [5, 10, 20, 40, 60]
 sims = [AccuracyTest(mesh_subdivisions=n, timesteps_per_second=40) for n in div_counts]
-sims[0].show()
-sims[-1].show()
+vis_first = anim.ZeroForm(sim=sims[0], get_data=lambda s: s.v, zlim=[-8.0, 8.0])
+vis_first.show()
+vis_last = anim.ZeroForm(sim=sims[-1], get_data=lambda s: s.v, zlim=[-8.0, 8.0])
+vis_last.show()
 
 v_errors = []
 w_errors = []

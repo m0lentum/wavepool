@@ -8,6 +8,7 @@ Incoming plane wave -cos(ωt - 𝜿·x).
 """
 
 import mesh
+import animate as anim
 from sim_runner import Simulation
 
 import numpy as np
@@ -70,7 +71,7 @@ class CircleScatterer(Simulation):
         )
         self.w_step_mat = dt * cmp_complex[0].d
 
-        super().__init__(mesh=cmp_mesh, dt=dt, step_count=step_count, zlim=[-8.0, 8.0])
+        super().__init__(mesh=cmp_mesh, dt=dt, step_count=step_count)
 
     def init_state(self):
         # time needed for incoming wave evaluation
@@ -124,5 +125,6 @@ class CircleScatterer(Simulation):
 
 
 sim = CircleScatterer()
-sim.show()
-# sim.save_gif()
+vis = anim.ZeroForm(sim=sim, get_data=lambda s: s.v, zlim=[-8.0, 8.0])
+vis.show()
+# vis.save_gif()
