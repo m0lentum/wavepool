@@ -71,7 +71,7 @@ class CircleScatterer(Simulation):
         )
         self.w_step_mat = dt * cmp_complex[0].d
 
-        super().__init__(mesh=cmp_mesh, dt=dt, step_count=step_count)
+        super().__init__(complex=cmp_complex, dt=dt, step_count=step_count)
 
     def init_state(self):
         # time needed for incoming wave evaluation
@@ -81,7 +81,7 @@ class CircleScatterer(Simulation):
         for vert_idx in range(len(self.v)):
             # time derivative of the incoming wave
             self.v[vert_idx] = self.inc_angular_vel * math.sin(
-                -np.dot(self.inc_wave_vector, self.mesh.vertices[vert_idx, :])
+                -np.dot(self.inc_wave_vector, self.complex.vertices[vert_idx, :])
             )
         self.w = np.zeros(cmp_complex[1].num_simplices)
         for edge_idx in range(len(self.w)):
@@ -116,8 +116,8 @@ class CircleScatterer(Simulation):
         """Evaluate the line integral of the particle velocity of the incoming wave
         over an edge of the mesh, in other words compute a value of `w` from the wave."""
 
-        p1 = self.mesh.vertices[edge_verts[0]]
-        p2 = self.mesh.vertices[edge_verts[1]]
+        p1 = self.complex.vertices[edge_verts[0]]
+        p2 = self.complex.vertices[edge_verts[1]]
         kdotp = np.dot(self.inc_wave_vector, p1)
         kdotl = np.dot(self.inc_wave_vector, p2 - p1)
         angle = self.inc_angular_vel * t
@@ -125,6 +125,6 @@ class CircleScatterer(Simulation):
 
 
 sim = CircleScatterer()
-vis = anim.ZeroForm(sim=sim, get_data=lambda s: s.v, zlim=[-8.0, 8.0])
+vis = anim.PressureOnVertices(sim=sim, get_data=lambda s: s.v, zlim=[-8.0, 8.0])
 vis.show()
 # vis.save_gif()

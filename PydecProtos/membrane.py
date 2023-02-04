@@ -48,13 +48,13 @@ class StandingWave(Simulation):
 
         self.v_step_mat = v_step_mat
         self.w_step_mat = w_step_mat
-        super().__init__(mesh=cmp_mesh, dt=dt, step_count=step_count)
+        super().__init__(complex=cmp_complex, dt=dt, step_count=step_count)
 
     def init_state(self):
         x_wave_count = 2
         y_wave_count = 3
-        self.v = np.sin(x_wave_count * self.mesh.vertices[:, 0]) * np.sin(
-            y_wave_count * self.mesh.vertices[:, 1]
+        self.v = np.sin(x_wave_count * self.complex.vertices[:, 0]) * np.sin(
+            y_wave_count * self.complex.vertices[:, 1]
         )
         # w is vector-valued, but represented in DEC as a scalar per mesh edge,
         # therefore a single scalar per edge here
@@ -68,17 +68,17 @@ class StandingWave(Simulation):
 # another simulation with the same equations but different initial conditions
 class MovingWave(StandingWave):
     def init_state(self):
-        x = self.mesh.vertices[:, 0]
-        y = self.mesh.vertices[:, 1]
+        x = self.complex.vertices[:, 0]
+        y = self.complex.vertices[:, 1]
         self.v = np.multiply(0.2 * np.multiply(x, x), np.sin(3 * x)) * np.sin(y)
         self.w = np.zeros(cmp_complex[1].num_simplices)
 
 
 sim1 = StandingWave()
-sim1_vis = anim.ZeroForm(sim=sim1, get_data=lambda s: s.v, zlim=[-1.5, 1.5])
+sim1_vis = anim.PressureOnVertices(sim=sim1, get_data=lambda s: s.v, zlim=[-1.5, 1.5])
 sim1_vis.show()
 
 sim2 = MovingWave()
-sim2_vis = anim.ZeroForm(sim=sim2, get_data=lambda s: s.v, zlim=[-1.5, 1.5])
+sim2_vis = anim.PressureOnVertices(sim=sim2, get_data=lambda s: s.v, zlim=[-1.5, 1.5])
 sim2_vis.show()
 # sim2_vis.save_mp4()

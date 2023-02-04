@@ -6,22 +6,11 @@ from abc import abstractmethod
 from dataclasses import dataclass
 
 
-@dataclass(init=False)
+@dataclass
 class Simulation(ABC):
-    # parameters
-    mesh: pydec.SimplicialMesh
+    complex: pydec.SimplicialComplex
     dt: float
     step_count: int
-
-    def __init__(
-        self,
-        mesh: pydec.SimplicialMesh,
-        dt: float,
-        step_count: int,
-    ):
-        self.mesh = mesh
-        self.dt = dt
-        self.step_count = step_count
 
     @abstractmethod
     def init_state(self):

@@ -1,6 +1,5 @@
 """Abstractions for visualizing values stored on different elements of a mesh."""
 
-from typing import Any, Callable, Optional
 import matplotlib.animation as plt_anim
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d as plt3d
@@ -9,6 +8,9 @@ import numpy.typing as npt
 from abc import ABC
 from abc import abstractmethod
 from dataclasses import dataclass
+from typing import Any, Callable
+
+import pydec
 
 from sim_runner import Simulation
 
@@ -16,16 +18,15 @@ from sim_runner import Simulation
 @dataclass(init=False)
 class Animator(ABC):
     sim: Simulation
-    get_data: Callable[[Any], npt.NDArray[np.float64]]
 
     fig: plt.Figure
     anim: plt_anim.FuncAnimation
 
     def __init__(
-        self, sim: Simulation, get_data: Callable[[Any], npt.NDArray[np.float64]]
+        self,
+        sim: Simulation,
     ):
         self.sim = sim
-        self.get_data = get_data
 
         self.fig = plt.figure(layout="tight")
         self.anim = plt_anim.FuncAnimation(
@@ -70,7 +71,7 @@ class Animator(ABC):
 
 
 @dataclass(init=False)
-class ZeroForm(Animator):
+class PressureOnVertices(Animator):
     """Visualize a 0-form on the vertices of a mesh."""
 
     ax: plt3d.Axes3D
@@ -82,8 +83,9 @@ class ZeroForm(Animator):
         get_data: Callable[[Any], npt.NDArray[np.float64]],
         zlim: list[float],
     ):
-        super().__init__(sim, get_data)
+        super().__init__(sim)
 
+        self.get_data = get_data
         self.ax = self.fig.add_subplot(1, 1, 1, projection="3d")
         self.zlim = zlim
 
@@ -91,18 +93,18 @@ class ZeroForm(Animator):
         self.ax.clear()
         self.ax.set_zlim3d(self.zlim)
         return self.ax.plot_trisurf(
-            self.sim.mesh.vertices[:, 0],
-            self.sim.mesh.vertices[:, 1],
+            self.sim.complex.vertices[:, 0],
+            self.sim.complex.vertices[:, 1],
             self.get_data(self.sim),
-            triangles=self.sim.mesh.indices,
+            triangles=self.sim.complex.simplices,
             cmap="viridis",
             edgecolor="none",
         )
 
 
 @dataclass
-class TwoForm(Animator):
-    """Visualize a 2-form on the faces of a mesh."""
+class FluxAndPressure(Animator):
+    """Visualize a primal 1-form flux and dual 0-form pressure."""
 
     ax: plt.Axes
     vmin: float
@@ -111,24 +113,40 @@ class TwoForm(Animator):
     def __init__(
         self,
         sim: Simulation,
-        get_data: Callable[[Any], npt.NDArray[np.float64]],
+        get_pressure: Callable[[Any], npt.NDArray[np.float64]],
+        get_flux: Callable[[Any], npt.NDArray[np.float64]],
         vmin: float,
         vmax: float,
     ):
-        super().__init__(sim, get_data)
+        super().__init__(sim)
 
+        self.get_pressure = get_pressure
+        self.get_flux = get_flux
         self.ax = self.fig.add_subplot(1, 1, 1)
         self.vmin = vmin
         self.vmax = vmax
 
     def draw(self):
         self.ax.clear()
-        return self.ax.tripcolor(
-            self.sim.mesh.vertices[:, 0],
-            self.sim.mesh.vertices[:, 1],
-            triangles=self.sim.mesh.indices,
-            facecolors=self.get_data(self.sim),
+        tris = self.ax.tripcolor(
+            self.sim.complex.vertices[:, 0],
+            self.sim.complex.vertices[:, 1],
+            triangles=self.sim.complex.simplices,
+            facecolors=self.get_pressure(self.sim),
             edgecolors="k",
             vmin=self.vmin,
             vmax=self.vmax,
         )
+        barys, arrows = pydec.simplex_quivers(self.sim.complex, self.get_flux(self.sim))
+        # rotate flux back to velocity direction
+        arrows = -np.vstack((-arrows[:, 1], arrows[:, 0])).T
+        quiver = self.ax.quiver(
+            barys[:, 0],
+            barys[:, 1],
+            arrows[:, 0],
+            arrows[:, 1],
+            units="dots",
+            width=1,
+            scale=1.0 / 30,
+        )
+        return [tris, quiver]
