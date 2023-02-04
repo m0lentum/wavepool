@@ -18,12 +18,11 @@ import pydec
 
 
 class AccuracyTest(Simulation):
-    def __init__(self, mesh_subdivisions: int, timesteps_per_second: int):
+    def __init__(self, elem_size: float, timesteps_per_second: int):
         # mesh parameters
         mesh_dim = np.pi
-        mesh_scale = mesh_dim / mesh_subdivisions
-        cmp_mesh = mesh.rect_unstructured(mesh_dim, mesh_dim, mesh_scale)
-        self.cmp_complex = pydec.SimplicialComplex(cmp_mesh)
+        cmp_mesh = mesh.rect_unstructured(mesh_dim, mesh_dim, elem_size)
+        cmp_complex = pydec.SimplicialComplex(cmp_mesh)
 
         # time parameters
         sim_time = 2.0 * np.pi
@@ -39,7 +38,7 @@ class AccuracyTest(Simulation):
         # gather boundary elements
         bound_verts = []
         bound_edges = []
-        for edge in self.cmp_complex.boundary():
+        for edge in cmp_complex.boundary():
             edge_verts = edge.boundary()
             bound_edges.append(edge)
             bound_verts.extend(edge_verts)
@@ -48,53 +47,43 @@ class AccuracyTest(Simulation):
         self.bound_edges = set(bound_edges)
 
         # time stepping matrices
-        self.v_step_mat = (
-            -dt
-            * self.cmp_complex[0].star_inv
-            * self.cmp_complex[0].d.T
-            * self.cmp_complex[1].star
-        )
-        self.w_step_mat = dt * self.cmp_complex[0].d
+        self.v_step_mat = -dt * cmp_complex[2].star * cmp_complex[1].d
+        self.q_step_mat = -dt * cmp_complex[1].star_inv * cmp_complex[1].d.T
 
-        super().__init__(mesh=cmp_mesh, dt=dt, step_count=step_count)
+        super().__init__(complex=cmp_complex, dt=dt, step_count=step_count)
 
     def init_state(self):
-        # time needed for incoming wave evaluation
+        # time stored for incoming wave evaluation
         self.t = 0.0
 
-        self.v = np.zeros(self.cmp_complex[0].num_simplices)
+        self.v = np.zeros(self.complex[2].num_simplices)
         for vert_idx in range(len(self.v)):
-            # time derivative of the incoming wave
             self.v[vert_idx] = self._eval_inc_wave_pressure(
-                0.0, self.mesh.vertices[vert_idx]
+                0.0, self.complex[2].circumcenter[vert_idx]
             )
-        self.w = np.zeros(self.cmp_complex[1].num_simplices)
-        for edge_idx in range(len(self.w)):
-            edge = self.cmp_complex[1].simplices[edge_idx]
-            self.w[edge_idx] = self._eval_inc_wave_velocity(0.5 * self.dt, edge)
+        self.q = np.zeros(self.complex[1].num_simplices)
+        for edge_idx in range(len(self.q)):
+            edge = self.complex[1].simplices[edge_idx]
+            self.q[edge_idx] = self._eval_inc_wave_flux(0.5 * self.dt, edge)
 
     def step(self):
         self.t += self.dt
-        self.v += self.v_step_mat * self.w
-        # plane wave at the boundary for v
-        for bound_vert in self.bound_verts:
-            vert_idx = self.cmp_complex[0].simplex_to_index.get(bound_vert)
-            self.v[vert_idx] = self._eval_inc_wave_pressure(
-                self.t, self.mesh.vertices[vert_idx]
+        self.v += self.v_step_mat * self.q
+        # set known solutions for temporary debugging
+        for vi in range(len(self.v)):
+            self.v[vi] = self._eval_inc_wave_pressure(
+                self.t, self.complex[2].circumcenter[vi]
             )
         # w is computed at a time instance offset by half dt
-        t_at_w = self.t + 0.5 * self.dt
-        self.w += self.w_step_mat * self.v
-        # plane wave at the boundary for w
+        t_at_q = self.t + 0.5 * self.dt
+        # self.q += self.q_step_mat * self.v
+        for edge_idx in range(len(self.q)):
+            edge = self.complex[1].simplices[edge_idx]
+            self.q[edge_idx] = self._eval_inc_wave_flux(t_at_q, edge)
+        # plane wave at the boundary for q
         for bound_edge in self.bound_edges:
-            edge_idx = self.cmp_complex[1].simplex_to_index.get(bound_edge)
-            self.w[edge_idx] = self._eval_inc_wave_velocity(
-                t_at_w, bound_edge.boundary()
-            )
-
-    def get_z_data(self):
-        # visualizing acoustic pressure
-        return self.v
+            edge_idx = self.complex[1].simplex_to_index.get(bound_edge)
+            self.q[edge_idx] = self._eval_inc_wave_flux(t_at_q, bound_edge.boundary())
 
     def _eval_inc_wave_pressure(self, t, position: npt.NDArray) -> float:
         """Evaluate the value of v for the incoming plane wave at a point."""
@@ -103,64 +92,79 @@ class AccuracyTest(Simulation):
             self.inc_angular_vel * t - np.dot(self.inc_wave_vector, position)
         )
 
-    def _eval_inc_wave_velocity(self, t: float, edge_verts: list[npt.NDArray]) -> float:
-        """Evaluate the line integral of the particle velocity of the incoming wave
-        over an edge of the mesh, in other words compute a value of `w` from the wave."""
+    def _eval_inc_wave_flux(self, t: float, edge_verts: list[npt.NDArray]) -> float:
+        """Evaluate the line integral of the area flux of the incoming wave
+        over an edge of the mesh, in other words compute a value of `q` from the wave."""
 
-        p1 = self.mesh.vertices[edge_verts[0]]
-        p2 = self.mesh.vertices[edge_verts[1]]
-        kdotp = np.dot(self.inc_wave_vector, p1)
-        kdotl = np.dot(self.inc_wave_vector, p2 - p1)
-        angle = self.inc_angular_vel * t
-        return math.cos(angle - kdotp) - math.cos(angle - kdotp - kdotl)
+        p = [self.complex.vertices[v] for v in edge_verts]
+        kdotp = np.dot(self.inc_wave_vector, p[0])
+        l = p[1] - p[0]
+        kdotl = np.dot(self.inc_wave_vector, l)
+        # the problem seems to be here: some edges have an orientation that causes the
+        # normal to face the opposite way from what's intended.
+        # TODO: figure out how to get this orientation and adjust accordingly
+        kdotn = np.dot(self.inc_wave_vector, np.array([l[1], -l[0]]))
+        wave_angle = self.inc_angular_vel * t
+        if abs(kdotl) < 1e-5:
+            return -np.linalg.norm(l) * math.sin(wave_angle - kdotp)
+        else:
+            return (kdotn / kdotl) * (
+                math.cos(wave_angle - kdotp) - math.cos(wave_angle - kdotp - kdotl)
+            )
 
     def current_max_pressure_error(self) -> float:
         """Find the largest deviation from the analytical plane wave solution's pressure
         in the current state of the simulation."""
 
         max_err = 0.0
-        for vert, v_val in zip(self.mesh.vertices, self.v):
+        for vert, v_val in zip(self.complex[2].circumcenter, self.v):
             exact_pressure = self._eval_inc_wave_pressure(self.t, vert)
             err = abs(exact_pressure - v_val)
             if err > max_err:
                 max_err = err
         return max_err
 
-    def current_max_velocity_error(self) -> float:
+    def current_max_flux_error(self) -> float:
         """Find the largest deviation from the analytical plane wave solution's velocity
         in the current state of the simulation."""
 
         max_err = 0.0
-        for edge_idx in range(len(self.w)):
-            w_val = self.w[edge_idx]
-            edge = self.cmp_complex[1].simplices[edge_idx]
-            exact_vel = self._eval_inc_wave_velocity(self.t + 0.5 * self.dt, edge)
-            err = abs(exact_vel - w_val)
+        for edge_idx in range(len(self.q)):
+            q_val = self.q[edge_idx]
+            edge = self.complex[1].simplices[edge_idx]
+            exact_flux = self._eval_inc_wave_flux(self.t + 0.5 * self.dt, edge)
+            err = abs(exact_flux - q_val)
             if err > max_err:
                 max_err = err
         return max_err
 
 
-div_counts = [5, 10, 20, 40, 60]
-sims = [AccuracyTest(mesh_subdivisions=n, timesteps_per_second=40) for n in div_counts]
-vis_first = anim.ZeroForm(sim=sims[0], get_data=lambda s: s.v, zlim=[-8.0, 8.0])
-vis_first.show()
-vis_last = anim.ZeroForm(sim=sims[-1], get_data=lambda s: s.v, zlim=[-8.0, 8.0])
-vis_last.show()
+mesh_sizes = [np.pi / n for n in [5, 10, 20]]
+sims = [AccuracyTest(elem_size=n, timesteps_per_second=60) for n in mesh_sizes]
+# vis = anim.FluxAndPressure(
+#     sim=sims[0], get_pressure=lambda s: s.v, get_flux=lambda s: s.q, vmin=-2, vmax=2
+# )
+# vis.show()
+vis2 = anim.FluxAndPressure(
+    sim=sims[1], get_pressure=lambda s: s.v, get_flux=lambda s: s.q, vmin=-2, vmax=2
+)
+vis2.show()
 
 v_errors = []
-w_errors = []
-for sim, div_count in zip(sims, div_counts):
-    sim.run_to_end()
+q_errors = []
+for sim in sims:
+    # sim.run_to_end()
+    sim.init_state()
+    sim.step()
     v_errors.append(sim.current_max_pressure_error())
-    w_errors.append(sim.current_max_velocity_error())
+    q_errors.append(sim.current_max_flux_error())
 
 fig = plt.figure()
 v_ax = fig.add_subplot(2, 1, 1)
-v_ax.set(xlabel="mesh division count", ylabel="max error in pressure")
-v_ax.plot(div_counts, v_errors)
+v_ax.set(xlabel="mesh element size", ylabel="max error in pressure")
+v_ax.plot(mesh_sizes, v_errors)
 w_ax = fig.add_subplot(2, 1, 2)
-w_ax.set(xlabel="mesh division count", ylabel="max error in velocity")
-w_ax.plot(div_counts, w_errors)
+w_ax.set(xlabel="mesh element size", ylabel="max error in velocity")
+w_ax.plot(mesh_sizes, q_errors)
 plt.show()
 fig.savefig("errors.png")
