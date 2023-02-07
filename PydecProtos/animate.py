@@ -128,7 +128,7 @@ class FluxAndPressure(Animator):
 
     def draw(self):
         self.ax.clear()
-        tris = self.ax.tripcolor(
+        self.ax.tripcolor(
             self.sim.complex.vertices[:, 0],
             self.sim.complex.vertices[:, 1],
             triangles=self.sim.complex.simplices,
@@ -137,10 +137,11 @@ class FluxAndPressure(Animator):
             vmin=self.vmin,
             vmax=self.vmax,
         )
+        # self._draw_tris_as_arrows()
         barys, arrows = pydec.simplex_quivers(self.sim.complex, self.get_flux(self.sim))
         # rotate flux back to velocity direction
-        arrows = -np.vstack((-arrows[:, 1], arrows[:, 0])).T
-        quiver = self.ax.quiver(
+        arrows = np.vstack((arrows[:, 1], -arrows[:, 0])).T
+        self.ax.quiver(
             barys[:, 0],
             barys[:, 1],
             arrows[:, 0],
@@ -149,4 +150,21 @@ class FluxAndPressure(Animator):
             width=1,
             scale=1.0 / 30,
         )
-        return [tris, quiver]
+
+    def _draw_tris_as_arrows(self):
+        """Draw the triangle mesh with arrows denoting the orientation of an edge.
+        Useful to debug orientation-related problems."""
+
+        for edge in self.sim.complex[1].simplices:
+            edge_start = self.sim.complex.vertices[edge[0]]
+            edge_dir = 0.8 * (
+                self.sim.complex.vertices[edge[1]] - self.sim.complex.vertices[edge[0]]
+            )
+            self.ax.arrow(
+                edge_start[0],
+                edge_start[1],
+                edge_dir[0],
+                edge_dir[1],
+                head_width=0.01,
+                head_length=0.04,
+            )

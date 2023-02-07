@@ -15,6 +15,7 @@ import numpy.typing as npt
 import math
 import matplotlib.pyplot as plt
 import pydec
+from typing import Iterable
 
 
 class AccuracyTest(Simulation):
@@ -47,8 +48,8 @@ class AccuracyTest(Simulation):
         self.bound_edges = set(bound_edges)
 
         # time stepping matrices
-        self.v_step_mat = -dt * cmp_complex[2].star * cmp_complex[1].d
-        self.q_step_mat = -dt * cmp_complex[1].star_inv * cmp_complex[1].d.T
+        self.v_step_mat = dt * cmp_complex[2].star * cmp_complex[1].d
+        self.q_step_mat = dt * cmp_complex[1].star_inv * cmp_complex[1].d.T
 
         super().__init__(complex=cmp_complex, dt=dt, step_count=step_count)
 
@@ -69,21 +70,13 @@ class AccuracyTest(Simulation):
     def step(self):
         self.t += self.dt
         self.v += self.v_step_mat * self.q
-        # set known solutions for temporary debugging
-        for vi in range(len(self.v)):
-            self.v[vi] = self._eval_inc_wave_pressure(
-                self.t, self.complex[2].circumcenter[vi]
-            )
         # w is computed at a time instance offset by half dt
         t_at_q = self.t + 0.5 * self.dt
-        # self.q += self.q_step_mat * self.v
-        for edge_idx in range(len(self.q)):
-            edge = self.complex[1].simplices[edge_idx]
-            self.q[edge_idx] = self._eval_inc_wave_flux(t_at_q, edge)
+        self.q += self.q_step_mat * self.v
         # plane wave at the boundary for q
         for bound_edge in self.bound_edges:
             edge_idx = self.complex[1].simplex_to_index.get(bound_edge)
-            self.q[edge_idx] = self._eval_inc_wave_flux(t_at_q, bound_edge.boundary())
+            self.q[edge_idx] = self._eval_inc_wave_flux(t_at_q, bound_edge)
 
     def _eval_inc_wave_pressure(self, t, position: npt.NDArray) -> float:
         """Evaluate the value of v for the incoming plane wave at a point."""
@@ -92,21 +85,19 @@ class AccuracyTest(Simulation):
             self.inc_angular_vel * t - np.dot(self.inc_wave_vector, position)
         )
 
-    def _eval_inc_wave_flux(self, t: float, edge_verts: list[npt.NDArray]) -> float:
+    def _eval_inc_wave_flux(self, t: float, edge_vert_indices: Iterable[int]) -> float:
         """Evaluate the line integral of the area flux of the incoming wave
         over an edge of the mesh, in other words compute a value of `q` from the wave."""
 
-        p = [self.complex.vertices[v] for v in edge_verts]
+        p = [self.complex.vertices[v] for v in edge_vert_indices]
         kdotp = np.dot(self.inc_wave_vector, p[0])
         l = p[1] - p[0]
         kdotl = np.dot(self.inc_wave_vector, l)
-        # the problem seems to be here: some edges have an orientation that causes the
-        # normal to face the opposite way from what's intended.
-        # TODO: figure out how to get this orientation and adjust accordingly
         kdotn = np.dot(self.inc_wave_vector, np.array([l[1], -l[0]]))
         wave_angle = self.inc_angular_vel * t
+
         if abs(kdotl) < 1e-5:
-            return -np.linalg.norm(l) * math.sin(wave_angle - kdotp)
+            return -kdotn * math.sin(wave_angle - kdotp)
         else:
             return (kdotn / kdotl) * (
                 math.cos(wave_angle - kdotp) - math.cos(wave_angle - kdotp - kdotl)
@@ -139,23 +130,18 @@ class AccuracyTest(Simulation):
         return max_err
 
 
-mesh_sizes = [np.pi / n for n in [5, 10, 20]]
+mesh_sizes = [np.pi / n for n in [5, 8, 10, 20, 40]]
 sims = [AccuracyTest(elem_size=n, timesteps_per_second=60) for n in mesh_sizes]
-# vis = anim.FluxAndPressure(
-#     sim=sims[0], get_pressure=lambda s: s.v, get_flux=lambda s: s.q, vmin=-2, vmax=2
-# )
-# vis.show()
-vis2 = anim.FluxAndPressure(
-    sim=sims[1], get_pressure=lambda s: s.v, get_flux=lambda s: s.q, vmin=-2, vmax=2
+vis = anim.FluxAndPressure(
+    sim=sims[2], get_pressure=lambda s: s.v, get_flux=lambda s: s.q, vmin=-2, vmax=2
 )
-vis2.show()
+vis.show()
+# vis.save_mp4()
 
 v_errors = []
 q_errors = []
 for sim in sims:
-    # sim.run_to_end()
-    sim.init_state()
-    sim.step()
+    sim.run_to_end()
     v_errors.append(sim.current_max_pressure_error())
     q_errors.append(sim.current_max_flux_error())
 
