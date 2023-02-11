@@ -102,7 +102,7 @@ class PressureOnVertices(Animator):
         )
 
 
-@dataclass
+@dataclass(init=False)
 class FluxAndPressure(Animator):
     """Visualize a primal 1-form flux and dual 0-form pressure."""
 
@@ -113,18 +113,20 @@ class FluxAndPressure(Animator):
     def __init__(
         self,
         sim: Simulation,
-        get_pressure: Callable[[Any], npt.NDArray[np.float64]],
-        get_flux: Callable[[Any], npt.NDArray[np.float64]],
-        vmin: float,
-        vmax: float,
+        get_pressure: Callable[[Any], npt.NDArray[np.float64]] = lambda s: s.v,
+        get_flux: Callable[[Any], npt.NDArray[np.float64]] = lambda s: s.q,
+        vmin: float = -2,
+        vmax: float = 2,
+        arrow_scale: float = 30,
     ):
         super().__init__(sim)
+        self.ax = self.fig.add_subplot(1, 1, 1)
 
         self.get_pressure = get_pressure
         self.get_flux = get_flux
-        self.ax = self.fig.add_subplot(1, 1, 1)
         self.vmin = vmin
         self.vmax = vmax
+        self.arrow_scale = arrow_scale
 
     def draw(self):
         self.ax.clear()
@@ -148,7 +150,7 @@ class FluxAndPressure(Animator):
             arrows[:, 1],
             units="dots",
             width=1,
-            scale=1.0 / 30,
+            scale=1.0 / self.arrow_scale,
         )
 
     def _draw_tris_as_arrows(self):

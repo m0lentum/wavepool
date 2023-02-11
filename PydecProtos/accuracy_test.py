@@ -132,9 +132,7 @@ class AccuracyTest(Simulation):
 
 mesh_sizes = [np.pi / n for n in [5, 8, 10, 20, 40]]
 sims = [AccuracyTest(elem_size=n, timesteps_per_second=60) for n in mesh_sizes]
-vis = anim.FluxAndPressure(
-    sim=sims[2], get_pressure=lambda s: s.v, get_flux=lambda s: s.q, vmin=-2, vmax=2
-)
+vis = anim.FluxAndPressure(sim=sims[2])
 vis.show()
 # vis.save_mp4()
 
