@@ -129,11 +129,19 @@ def eval_inc_wave_flux(t: float, edge_vert_indices: Iterable[int]) -> float:
 
 @dataclass
 class State:
+    """State vector with named parts for convenience."""
+
     pressure: npt.NDArray[np.float64]
     flux: npt.NDArray[np.float64]
 
     def copy(self):
         return State(pressure=self.pressure.copy(), flux=self.flux.copy())
+
+    def dot(self, other):
+        return np.dot(self.pressure, other.pressure) + np.dot(self.flux, other.flux)
+
+    def scaled(self, s: float):
+        return State(pressure=s * self.pressure, flux=s * self.flux)
 
     def __add__(self, other):
         return State(
@@ -145,6 +153,9 @@ class State:
             pressure=self.pressure - other.pressure, flux=self.flux - other.flux
         )
 
+    def __neg__(self):
+        return State(pressure=-self.pressure, flux=-self.flux)
+
 
 #
 # simulation solver
@@ -152,11 +163,11 @@ class State:
 
 
 @dataclass
-class Solver:
+class ForwardSolve:
     state: State
-    t: float
+    t: float = 0.0
 
-    def step_forward(self):
+    def step(self, source_term_scaling: float = 1.0):
         """Solve one timestep in the forward equation."""
 
         self.t += dt
@@ -165,13 +176,18 @@ class Solver:
         t_at_w = self.t + 0.5 * dt
         self.state.flux += q_step_mat * self.state.pressure
         # incoming wave on the scatterer's surface
-        # (TODO: Mur transition)
         for bound_edge in inner_bound_edges:
             edge_idx = cmp_complex[1].simplex_to_index.get(bound_edge)
-            self.state.flux[edge_idx] = eval_inc_wave_flux(
-                t_at_w,
-                [cmp_complex[0].simplex_to_index.get(v) for v in bound_edge.boundary()],
-            )
+            if source_term_scaling > 0.0:
+                self.state.flux[edge_idx] = source_term_scaling * eval_inc_wave_flux(
+                    t_at_w,
+                    [
+                        cmp_complex[0].simplex_to_index.get(v)
+                        for v in bound_edge.boundary()
+                    ],
+                )
+            else:
+                self.state.flux[edge_idx] = 0.0
         # absorbing outer boundary condition
         for bound_edge, edge_info in zip(outer_bound_edges, outer_bound_infos):
             edge_idx = cmp_complex[1].simplex_to_index.get(bound_edge)
@@ -181,10 +197,14 @@ class Solver:
                 * edge_info.orientation
             )
 
-    def step_backward(self):
+
+@dataclass
+class BackwardSolve:
+    state: State
+
+    def step(self):
         """Solve one timestep in the backward equation."""
 
-        self.t -= dt
         self.state.flux += p_step_mat.T * self.state.pressure
         # inner Dirichlet boundary without source term
         for bound_edge in inner_bound_edges:
@@ -203,22 +223,22 @@ class Solver:
         self.state.pressure += q_step_mat.T * self.state.flux
 
 
-zero_state = State(
-    pressure=np.zeros(cmp_complex[2].num_simplices),
-    flux=np.zeros(cmp_complex[1].num_simplices),
-)
-
-# TODO: run Mur transition here
-
-
-def compute_gradient(initial_state: State) -> State:
+def compute_cost_gradient(initial_state: State, use_source_terms: bool) -> State:
     """Compute the gradient of the cost function
-    with respect to the given initial values."""
+    with respect to the given initial values
+    using the adjoint state method.
+
+    If use_source_terms == True, corresponds to computing Ax - b
+    in the linear system `grad J = Ax - b = 0`.
+    Else, corresponds to computing Ax in the same system."""
 
     # solve the forward equation
-    sim_fwd = Solver(state=initial_state.copy(), t=0.0)
+    sim_fwd = ForwardSolve(state=initial_state.copy())
     for _ in range(step_count):
-        sim_fwd.step_forward()
+        if use_source_terms:
+            sim_fwd.step()
+        else:
+            sim_fwd.step(source_term_scaling=0.0)
     final_state = sim_fwd.state
 
     # compute starting value for the backward equation
@@ -230,15 +250,57 @@ def compute_gradient(initial_state: State) -> State:
     )
 
     # solve the backward equation
-    sim_bwd = Solver(state=bwd_init_state, t=time_period)
+    sim_bwd = BackwardSolve(state=bwd_init_state)
     for _ in range(step_count - 1):
-        sim_bwd.step_backward()
-    final_bwd_state = sim_bwd.state
+        sim_bwd.step()
+    final_bwd_state = State(
+        pressure=sim_bwd.state.pressure,
+        flux=sim_bwd.state.flux + p_step_mat.T * sim_bwd.state.pressure,
+    )
 
     return final_bwd_state - fwd_diff
 
 
-grad = compute_gradient(zero_state)
-print(grad)
+#
+# running the simulation
+#
 
-# TODO: conjugate gradient optimization
+
+zero_state = State(
+    pressure=np.zeros(cmp_complex[2].num_simplices),
+    flux=np.zeros(cmp_complex[1].num_simplices),
+)
+
+# TODO: run Mur transition here
+
+# begin conjugate gradient optimization
+
+# this algorithm doesn't currently give correct results,
+# however I've confirmed by replacing the gradient computation
+# with a generic numpy Ax=b and comparing to a reference solver
+# that the steps and signs are correct.
+# therefore the problem is in the gradient computation.
+# TODO: debug this
+
+stop_condition_sq = (1e-5) ** 2
+max_iterations = 50
+
+residual = -compute_cost_gradient(zero_state, use_source_terms=True)
+initial_resid_norm_sq = residual.dot(residual)
+resid_norm_sq = initial_resid_norm_sq
+search_dir = residual
+approx_solution = zero_state
+
+for _ in range(max_iterations):
+    resid_update = compute_cost_gradient(search_dir, use_source_terms=False)
+    solution_update_param = resid_norm_sq / resid_update.dot(search_dir)
+    approx_solution += search_dir.scaled(solution_update_param)
+    residual -= resid_update.scaled(solution_update_param)
+
+    next_resid_norm_sq = residual.dot(residual)
+    resid_norm_proportion = next_resid_norm_sq / resid_norm_sq
+    search_dir = residual + search_dir.scaled(resid_norm_proportion)
+
+    resid_norm_sq = next_resid_norm_sq
+    if (resid_norm_sq / initial_resid_norm_sq) < stop_condition_sq:
+        break
