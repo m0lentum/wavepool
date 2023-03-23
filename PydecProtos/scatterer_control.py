@@ -5,8 +5,6 @@ to find a time-harmonic solution.
 """
 
 import mesh
-import animate as anim
-from sim_runner import Simulation
 
 import numpy as np
 import numpy.typing as npt
@@ -14,7 +12,7 @@ import math
 import matplotlib.pyplot as plt
 import pydec
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Callable, Iterable
 
 
 #
@@ -156,6 +154,31 @@ class State:
     def __neg__(self):
         return State(pressure=-self.pressure, flux=-self.flux)
 
+    def draw(self):
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        ax.tripcolor(
+            cmp_complex.vertices[:, 0],
+            cmp_complex.vertices[:, 1],
+            triangles=cmp_complex.simplices,
+            facecolors=self.pressure,
+            edgecolors="k",
+            vmin=-1,
+            vmax=1,
+        )
+        barys, arrows = pydec.simplex_quivers(cmp_complex, self.flux)
+        arrows = np.vstack((arrows[:, 1], -arrows[:, 0])).T
+        ax.quiver(
+            barys[:, 0],
+            barys[:, 1],
+            arrows[:, 0],
+            arrows[:, 1],
+            units="dots",
+            width=1,
+            scale=1.0 / 30.0,
+        )
+        plt.show()
+
 
 #
 # simulation solver
@@ -167,7 +190,7 @@ class ForwardSolve:
     state: State
     t: float = 0.0
 
-    def step(self, source_term_scaling: float = 1.0):
+    def step(self, source_term_scaling: Callable[[float], float] = lambda _: 1.0):
         """Solve one timestep in the forward equation."""
 
         self.t += dt
@@ -178,16 +201,12 @@ class ForwardSolve:
         # incoming wave on the scatterer's surface
         for bound_edge in inner_bound_edges:
             edge_idx = cmp_complex[1].simplex_to_index.get(bound_edge)
-            if source_term_scaling > 0.0:
-                self.state.flux[edge_idx] = source_term_scaling * eval_inc_wave_flux(
-                    t_at_w,
-                    [
-                        cmp_complex[0].simplex_to_index.get(v)
-                        for v in bound_edge.boundary()
-                    ],
-                )
-            else:
-                self.state.flux[edge_idx] = 0.0
+            self.state.flux[edge_idx] = source_term_scaling(
+                self.t
+            ) * eval_inc_wave_flux(
+                t_at_w,
+                [cmp_complex[0].simplex_to_index.get(v) for v in bound_edge.boundary()],
+            )
         # absorbing outer boundary condition
         for bound_edge, edge_info in zip(outer_bound_edges, outer_bound_infos):
             edge_idx = cmp_complex[1].simplex_to_index.get(bound_edge)
@@ -238,7 +257,7 @@ def compute_cost_gradient(initial_state: State, use_source_terms: bool) -> State
         if use_source_terms:
             sim_fwd.step()
         else:
-            sim_fwd.step(source_term_scaling=0.0)
+            sim_fwd.step(source_term_scaling=lambda _: 0.0)
     final_state = sim_fwd.state
 
     # compute starting value for the backward equation
@@ -271,7 +290,24 @@ zero_state = State(
     flux=np.zeros(cmp_complex[1].num_simplices),
 )
 
-# TODO: run Mur transition here
+# ease in the source terms before beginning optimization
+
+transition_time = 5 * time_period
+transition_step_count = math.ceil(transition_time / dt)
+transition_sim = ForwardSolve(state=zero_state)
+
+
+def easing(t: float) -> float:
+    sin_val = math.sin((t / transition_time) * (np.pi / 2.0))
+    return (2.0 - sin_val) * sin_val
+
+
+for _ in range(transition_step_count):
+    transition_sim.step(source_term_scaling=easing)
+
+initial_state = transition_sim.state
+
+initial_state.draw()
 
 # begin conjugate gradient optimization
 
@@ -285,17 +321,20 @@ zero_state = State(
 stop_condition_sq = (1e-5) ** 2
 max_iterations = 50
 
-residual = -compute_cost_gradient(zero_state, use_source_terms=True)
+residual = -compute_cost_gradient(initial_state, use_source_terms=True)
 initial_resid_norm_sq = residual.dot(residual)
 resid_norm_sq = initial_resid_norm_sq
 search_dir = residual
 approx_solution = zero_state
 
-for _ in range(max_iterations):
+for i in range(max_iterations):
     resid_update = compute_cost_gradient(search_dir, use_source_terms=False)
     solution_update_param = resid_norm_sq / resid_update.dot(search_dir)
     approx_solution += search_dir.scaled(solution_update_param)
     residual -= resid_update.scaled(solution_update_param)
+
+    if i % 5 == 0:
+        approx_solution.draw()
 
     next_resid_norm_sq = residual.dot(residual)
     resid_norm_proportion = next_resid_norm_sq / resid_norm_sq
