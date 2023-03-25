@@ -88,9 +88,9 @@ inc_angular_vel = 2.0
 # since we're looking for a time-periodic solution,
 # it's important the simulated time range
 # coincides with the period the incoming wave
-time_period = (2.0 * np.pi) / inc_angular_vel
+wave_period = (2.0 * np.pi) / inc_angular_vel
 dt = np.pi / 60.0
-step_count = math.ceil(time_period / dt)
+steps_per_period = math.ceil(wave_period / dt)
 
 # time stepping matrices
 p_step_mat = dt * cmp_complex[2].star * cmp_complex[1].d
@@ -202,7 +202,7 @@ class ForwardSolve:
         for bound_edge in inner_bound_edges:
             edge_idx = cmp_complex[1].simplex_to_index.get(bound_edge)
             self.state.flux[edge_idx] = source_term_scaling(
-                self.t
+                t_at_w
             ) * eval_inc_wave_flux(
                 t_at_w,
                 [cmp_complex[0].simplex_to_index.get(v) for v in bound_edge.boundary()],
@@ -242,7 +242,21 @@ class BackwardSolve:
         self.state.pressure += q_step_mat.T * self.state.flux
 
 
-def compute_cost_gradient(initial_state: State, use_source_terms: bool) -> State:
+@dataclass
+class GradientResult:
+    """Gradient of the cost function and useful related measurements."""
+
+    gradient: State
+    # difference between the initial and final states of the forward simulation
+    forward_diff: State
+
+    def energy(self) -> float:
+        return 0.5 * self.forward_diff.dot(self.forward_diff)
+
+
+def compute_cost_gradient(
+    initial_state: State, use_source_terms: bool = True
+) -> GradientResult:
     """Compute the gradient of the cost function
     with respect to the given initial values
     using the adjoint state method.
@@ -253,11 +267,9 @@ def compute_cost_gradient(initial_state: State, use_source_terms: bool) -> State
 
     # solve the forward equation
     sim_fwd = ForwardSolve(state=initial_state.copy())
-    for _ in range(step_count):
-        if use_source_terms:
-            sim_fwd.step()
-        else:
-            sim_fwd.step(source_term_scaling=lambda _: 0.0)
+    source_scaling = (lambda _: 1.0) if use_source_terms else (lambda _: 0.0)
+    for _ in range(steps_per_period):
+        sim_fwd.step(source_term_scaling=source_scaling)
     final_state = sim_fwd.state
 
     # compute starting value for the backward equation
@@ -270,14 +282,17 @@ def compute_cost_gradient(initial_state: State, use_source_terms: bool) -> State
 
     # solve the backward equation
     sim_bwd = BackwardSolve(state=bwd_init_state)
-    for _ in range(step_count - 1):
+    for _ in range(steps_per_period - 1):
         sim_bwd.step()
     final_bwd_state = State(
-        pressure=sim_bwd.state.pressure,
-        flux=sim_bwd.state.flux + p_step_mat.T * sim_bwd.state.pressure,
+        pressure=-sim_bwd.state.pressure,
+        flux=-sim_bwd.state.flux - p_step_mat.T * sim_bwd.state.pressure,
     )
 
-    return final_bwd_state - fwd_diff
+    return GradientResult(
+        gradient=final_bwd_state - fwd_diff,
+        forward_diff=fwd_diff,
+    )
 
 
 #
@@ -290,11 +305,11 @@ zero_state = State(
     flux=np.zeros(cmp_complex[1].num_simplices),
 )
 
-# ease in the source terms before beginning optimization
+# ease in the source terms to obtain smooth initial values for optimization
 
-transition_time = 5 * time_period
+transition_time = 1 * wave_period
 transition_step_count = math.ceil(transition_time / dt)
-transition_sim = ForwardSolve(state=zero_state)
+transition_sim = ForwardSolve(state=zero_state.copy())
 
 
 def easing(t: float) -> float:
@@ -307,34 +322,43 @@ for _ in range(transition_step_count):
 
 initial_state = transition_sim.state
 
-initial_state.draw()
+# reference forward simulation to compare results to for debugging
+
+reference_sim = ForwardSolve(state=initial_state.copy())
+for i in range(200 * steps_per_period):
+    reference_sim.step()
+
+ref_grad = compute_cost_gradient(reference_sim.state)
+print(ref_grad.gradient.dot(ref_grad.gradient))
+print(ref_grad.energy())
 
 # begin conjugate gradient optimization
-
-# this algorithm doesn't currently give correct results,
-# however I've confirmed by replacing the gradient computation
-# with a generic numpy Ax=b and comparing to a reference solver
-# that the steps and signs are correct.
-# therefore the problem is in the gradient computation.
-# TODO: debug this
 
 stop_condition_sq = (1e-5) ** 2
 max_iterations = 50
 
-residual = -compute_cost_gradient(initial_state, use_source_terms=True)
+approx_solution = initial_state.copy()
+residual = -compute_cost_gradient(approx_solution, use_source_terms=True).gradient
 initial_resid_norm_sq = residual.dot(residual)
 resid_norm_sq = initial_resid_norm_sq
 search_dir = residual
-approx_solution = zero_state
 
 for i in range(max_iterations):
-    resid_update = compute_cost_gradient(search_dir, use_source_terms=False)
+    # this doesn't currently work.
+    # things confirmed correct:
+    # - the CG algorithm itself, by testing it with a generic numpy Ax=b system
+    # - the gradient computation (when use_source_terms=True),
+    #   by solving this optimization problem with simple naive gradient descent
+    # therefore it seems the only place the problem can be
+    # is this gradient update computation with `use_source_terms=False`.
+    # TODO: check my math
+    resid_update = compute_cost_gradient(search_dir, use_source_terms=False).gradient
     solution_update_param = resid_norm_sq / resid_update.dot(search_dir)
     approx_solution += search_dir.scaled(solution_update_param)
     residual -= resid_update.scaled(solution_update_param)
 
-    if i % 5 == 0:
-        approx_solution.draw()
+    # if i % 20 == 0:
+    #     approx_solution.draw()
 
     next_resid_norm_sq = residual.dot(residual)
     resid_norm_proportion = next_resid_norm_sq / resid_norm_sq
@@ -343,3 +367,5 @@ for i in range(max_iterations):
     resid_norm_sq = next_resid_norm_sq
     if (resid_norm_sq / initial_resid_norm_sq) < stop_condition_sq:
         break
+
+approx_solution.draw()
