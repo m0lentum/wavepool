@@ -40,6 +40,48 @@ def rect_unstructured(
     return _finalize_mesh_2d()
 
 
+def square_with_hole(
+    outer_extent: float, inner_extent: float, tri_radius: float
+) -> pydec.SimplicialMesh:
+    """Create a square mesh with nonuniform triangle placement
+    and a hole in the middle."""
+
+    gmsh.initialize()
+    gmsh.model.add("rec")
+
+    oe = outer_extent
+    ie = inner_extent
+    gmsh.model.geo.addPoint(-oe, -oe, 0, tri_radius, 1)
+    gmsh.model.geo.addPoint(oe, -oe, 0, tri_radius, 2)
+    gmsh.model.geo.addPoint(oe, oe, 0, tri_radius, 3)
+    gmsh.model.geo.addPoint(-oe, oe, 0, tri_radius, 4)
+
+    gmsh.model.geo.addLine(1, 2, 1)
+    gmsh.model.geo.addLine(2, 3, 2)
+    gmsh.model.geo.addLine(3, 4, 3)
+    gmsh.model.geo.addLine(4, 1, 4)
+
+    gmsh.model.geo.addCurveLoop([1, 2, 3, 4], 1)
+
+    gmsh.model.geo.addPoint(-ie, -ie, 0, tri_radius, 5)
+    gmsh.model.geo.addPoint(ie, -ie, 0, tri_radius, 6)
+    gmsh.model.geo.addPoint(ie, ie, 0, tri_radius, 7)
+    gmsh.model.geo.addPoint(-ie, ie, 0, tri_radius, 8)
+
+    gmsh.model.geo.addLine(5, 6, 5)
+    gmsh.model.geo.addLine(6, 7, 6)
+    gmsh.model.geo.addLine(7, 8, 7)
+    gmsh.model.geo.addLine(8, 5, 8)
+
+    gmsh.model.geo.addCurveLoop([5, 6, 7, 8], 2)
+
+    gmsh.model.geo.addPlaneSurface([1, 2], 1)
+
+    gmsh.model.geo.synchronize()
+    gmsh.model.mesh.generate(2)
+    return _finalize_mesh_2d()
+
+
 def rect_uniform(
     mesh_width: float, mesh_height: float, tri_radius: float
 ) -> pydec.SimplicialMesh:

@@ -9,6 +9,7 @@ import mesh
 import numpy as np
 import numpy.typing as npt
 import math
+import matplotlib.animation as plt_anim
 import matplotlib.pyplot as plt
 import pydec
 from dataclasses import dataclass
@@ -19,13 +20,10 @@ from typing import Callable, Iterable
 # mesh generation
 #
 
-# this part is copied verbatim from scatterer_forward.py.
-# TODO: perhaps make a module that could generate test cases like this
-# with different shapes for the scatterer object?
-
-scatterer_radius = 1.0
-outer_edge_radius = 3.0
-cmp_mesh = mesh.annulus(scatterer_radius, outer_edge_radius, refine_count=1)
+# the original circle mesh used for this turned out to be
+# too bad quality to get good results with the controllability method.
+# TODO: optimize the mesh so we can use a larger variety of shapes
+cmp_mesh = mesh.square_with_hole(np.pi * 2.0, np.pi / 3.0, np.pi / 6.0)
 cmp_complex = pydec.SimplicialComplex(cmp_mesh)
 
 
@@ -33,8 +31,10 @@ cmp_complex = pydec.SimplicialComplex(cmp_mesh)
 # for applying different boundary conditions to each
 inner_bound_edges: list[pydec.Simplex] = []
 outer_bound_edges: list[pydec.Simplex] = []
-# distinguish between boundaries by checking squared distance from origin
-middle_dist_sq = ((outer_edge_radius + scatterer_radius) / 2.0) ** 2
+# distinguish between boundaries by checking squared distance from origin.
+# TODO: this is a remnant of the old circle mesh and is very limiting.
+# use gmsh tags or edge orientation instead
+middle_dist_sq = 2.0**2
 for edge in cmp_complex.boundary():
     edge_verts = edge.boundary()
     test_vert = cmp_mesh.vertices[cmp_complex[0].simplex_to_index.get(edge_verts[0])]
@@ -89,7 +89,7 @@ inc_angular_vel = 2.0
 # it's important the simulated time range
 # coincides with the period the incoming wave
 wave_period = (2.0 * np.pi) / inc_angular_vel
-dt = np.pi / 60.0
+dt = np.pi / 120.0
 steps_per_period = math.ceil(wave_period / dt)
 
 # time stepping matrices
@@ -127,7 +127,8 @@ def eval_inc_wave_flux(t: float, edge_vert_indices: Iterable[int]) -> float:
 
 @dataclass
 class State:
-    """State vector with named parts for convenience."""
+    """State vector with named parts for convenience
+    and methods for visualization."""
 
     pressure: npt.NDArray[np.float64]
     flux: npt.NDArray[np.float64]
@@ -157,6 +158,9 @@ class State:
     def draw(self):
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
+        self._draw(ax)
+
+    def _draw(self, ax: plt.Axes):
         ax.tripcolor(
             cmp_complex.vertices[:, 0],
             cmp_complex.vertices[:, 1],
@@ -175,9 +179,30 @@ class State:
             arrows[:, 1],
             units="dots",
             width=1,
-            scale=1.0 / 30.0,
+            scale=1.0 / 15.0,
         )
-        plt.show()
+
+    def save_anim(self, filename: str = "solution.gif", size: list[int] = [6, 6]):
+        sim_fwd = ForwardSolve(state=self.copy())
+        fig = plt.figure(figsize=size)
+        ax = fig.add_subplot(1, 1, 1)
+
+        def step(_):
+            ax.clear()
+            sim_fwd.step()
+            sim_fwd.state._draw(ax)
+
+        anim = plt_anim.FuncAnimation(
+            fig=fig,
+            init_func=sim_fwd.state._draw(ax),
+            func=step,
+            frames=steps_per_period,
+            interval=int(1000 * dt),
+        )
+
+        print(f"Saving {filename}. This takes a while")
+        writer = plt_anim.FFMpegWriter(fps=int(1.0 / dt))
+        anim.save(filename, writer)
 
 
 #
@@ -281,7 +306,7 @@ def compute_cost_gradient(
     )
 
     # solve the backward equation
-    sim_bwd = BackwardSolve(state=bwd_init_state)
+    sim_bwd = BackwardSolve(state=bwd_init_state.copy())
     for _ in range(steps_per_period - 1):
         sim_bwd.step()
     final_bwd_state = State(
@@ -307,7 +332,7 @@ zero_state = State(
 
 # ease in the source terms to obtain smooth initial values for optimization
 
-transition_time = 1 * wave_period
+transition_time = 5 * wave_period
 transition_step_count = math.ceil(transition_time / dt)
 transition_sim = ForwardSolve(state=zero_state.copy())
 
@@ -322,43 +347,22 @@ for _ in range(transition_step_count):
 
 initial_state = transition_sim.state
 
-# reference forward simulation to compare results to for debugging
-
-reference_sim = ForwardSolve(state=initial_state.copy())
-for i in range(200 * steps_per_period):
-    reference_sim.step()
-
-ref_grad = compute_cost_gradient(reference_sim.state)
-print(ref_grad.gradient.dot(ref_grad.gradient))
-print(ref_grad.energy())
-
 # begin conjugate gradient optimization
 
-stop_condition_sq = (1e-5) ** 2
+stop_condition_sq = (1e-2) ** 2
 max_iterations = 50
 
 approx_solution = initial_state.copy()
 residual = -compute_cost_gradient(approx_solution, use_source_terms=True).gradient
 initial_resid_norm_sq = residual.dot(residual)
 resid_norm_sq = initial_resid_norm_sq
-search_dir = residual
+search_dir = residual.copy()
 
 for i in range(max_iterations):
-    # this doesn't currently work.
-    # things confirmed correct:
-    # - the CG algorithm itself, by testing it with a generic numpy Ax=b system
-    # - the gradient computation (when use_source_terms=True),
-    #   by solving this optimization problem with simple naive gradient descent
-    # therefore it seems the only place the problem can be
-    # is this gradient update computation with `use_source_terms=False`.
-    # TODO: check my math
     resid_update = compute_cost_gradient(search_dir, use_source_terms=False).gradient
     solution_update_param = resid_norm_sq / resid_update.dot(search_dir)
     approx_solution += search_dir.scaled(solution_update_param)
     residual -= resid_update.scaled(solution_update_param)
-
-    # if i % 20 == 0:
-    #     approx_solution.draw()
 
     next_resid_norm_sq = residual.dot(residual)
     resid_norm_proportion = next_resid_norm_sq / resid_norm_sq
@@ -366,6 +370,12 @@ for i in range(max_iterations):
 
     resid_norm_sq = next_resid_norm_sq
     if (resid_norm_sq / initial_resid_norm_sq) < stop_condition_sq:
+        print("Converged within step limit!")
         break
 
+energy = compute_cost_gradient(approx_solution).energy()
+print(f"Final energy: {energy}")
+
 approx_solution.draw()
+plt.show()
+approx_solution.save_anim()
