@@ -51,17 +51,8 @@ class Animator(ABC):
         self.sim.init_state()
         plt.show()
 
-    def save_gif(self, filename: str = "result.gif"):
-        """Run the simulation from the beginning and save it to a .gif file."""
-
-        print(f"Saving {filename}. This takes a while")
-        assert self.anim is not None
-        self.sim.init_state()
-        writer = plt_anim.ImageMagickWriter(fps=int(1.0 / self.sim.dt))
-        self.anim.save(filename, writer)
-
-    def save_mp4(self, filename: str = "result.mp4"):
-        """Run the simulation from the beginning and save it to a .mp4 file."""
+    def save(self, filename: str = "result.mp4"):
+        """Run the simulation from the beginning and save it to a file."""
 
         print(f"Saving {filename}. This takes a while")
         assert self.anim is not None

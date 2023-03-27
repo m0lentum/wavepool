@@ -159,4 +159,4 @@ class CircleScatterer(Simulation):
 sim = CircleScatterer()
 vis = anim.FluxAndPressure(sim=sim, arrow_scale=20)
 vis.show()
-# vis.save_mp4()
+# vis.save()

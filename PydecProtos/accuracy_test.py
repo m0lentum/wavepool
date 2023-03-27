@@ -134,7 +134,7 @@ mesh_sizes = [np.pi / n for n in [5, 8, 10, 20, 40]]
 sims = [AccuracyTest(elem_size=n, timesteps_per_second=60) for n in mesh_sizes]
 vis = anim.FluxAndPressure(sim=sims[2])
 vis.show()
-# vis.save_mp4()
+# vis.save()
 
 v_errors = []
 q_errors = []
