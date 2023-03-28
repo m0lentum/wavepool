@@ -24,11 +24,6 @@ in
 pkgs.mkShell {
   buildInputs = with pkgs; [
     niv
-    gnumake
-    # C++ and dependencies
-    gcc
-    openmpi
-    # Python and dependencies
     python
     gmsh
   ];

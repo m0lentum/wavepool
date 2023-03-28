@@ -4,7 +4,7 @@ but using the exact controllability method
 to find a time-harmonic solution.
 """
 
-import mesh
+from utils import mesh
 
 import numpy as np
 import numpy.typing as npt
@@ -378,4 +378,4 @@ print(f"Final energy: {energy}")
 
 approx_solution.draw()
 plt.show()
-approx_solution.save_anim()
+# approx_solution.save_anim()

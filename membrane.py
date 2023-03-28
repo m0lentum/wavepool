@@ -11,9 +11,9 @@ The boundary condition ɸ = 0 implies v = 0, but w can vary on the boundary.
 (TODO: add a .md note to explain in more detail)
 """
 
-import mesh
-import animate as anim
-from sim_runner import Simulation
+from utils import mesh
+from utils import animate as anim
+from utils.sim_runner import Simulation
 
 import numpy as np
 import pydec

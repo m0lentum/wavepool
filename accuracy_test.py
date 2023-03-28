@@ -6,9 +6,9 @@ Examining error compared to known solution as the
 mesh is refined and timestep shortened.
 """
 
-import mesh
-import animate as anim
-from sim_runner import Simulation
+from utils import mesh
+from utils import animate as anim
+from utils.sim_runner import Simulation
 
 import numpy as np
 import numpy.typing as npt

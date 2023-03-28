@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 import pydec
 
-from sim_runner import Simulation
+from .sim_runner import Simulation
 
 
 @dataclass(init=False)

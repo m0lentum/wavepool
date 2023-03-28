@@ -7,9 +7,9 @@ modeling empty space.
 Incoming plane wave -cos(ωt - 𝜿·x).
 """
 
-import mesh
-import animate as anim
-from sim_runner import Simulation
+from utils import mesh
+from utils import animate as anim
+from utils.sim_runner import Simulation
 
 import numpy as np
 import numpy.typing as npt

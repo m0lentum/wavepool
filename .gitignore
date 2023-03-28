@@ -1,6 +1,6 @@
 build/
 __pycache__/
 # visualizations from simulations
-PydecProtos/*.gif
-PydecProtos/*.mp4
-PydecProtos/*.png
+*.gif
+*.mp4
+*.png

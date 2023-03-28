@@ -1,6 +1,3 @@
-[submodule "gfd"]
-	path = gfd
-	url = https://github.com/juolrabi/gfd.git
 [submodule "pydec"]
 	path = pydec
 	url = https://github.com/hirani/pydec.git
