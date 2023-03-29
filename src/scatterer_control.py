@@ -110,8 +110,8 @@ class State:
     """State vector with named parts for convenience
     and methods for visualization."""
 
-    pressure: npt.NDArray[np.float64]
-    flux: npt.NDArray[np.float64]
+    pressure: npt.NDArray[np.float64] = np.zeros(cmp_complex[2].num_simplices)
+    flux: npt.NDArray[np.float64] = np.zeros(cmp_complex[1].num_simplices)
 
     def copy(self):
         return State(pressure=self.pressure.copy(), flux=self.flux.copy())
@@ -136,33 +136,40 @@ class State:
         return State(pressure=-self.pressure, flux=-self.flux)
 
     def draw(self):
+        """Draw a still image of the state.
+        Remember to also call `plt.show()` after."""
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
         self._draw(ax)
 
-    def _draw(self, ax: plt.Axes):
+    def _draw(self, ax: plt.Axes, vlims: list[int] = [-1, 1], draw_velocity=True):
         ax.tripcolor(
             cmp_complex.vertices[:, 0],
             cmp_complex.vertices[:, 1],
             triangles=cmp_complex.simplices,
             facecolors=self.pressure,
             edgecolors="k",
-            vmin=-1,
-            vmax=1,
+            vmin=vlims[0],
+            vmax=vlims[1],
         )
-        barys, arrows = pydec.simplex_quivers(cmp_complex, self.flux)
-        arrows = np.vstack((arrows[:, 1], -arrows[:, 0])).T
-        ax.quiver(
-            barys[:, 0],
-            barys[:, 1],
-            arrows[:, 0],
-            arrows[:, 1],
-            units="dots",
-            width=1,
-            scale=1.0 / 15.0,
-        )
+        if draw_velocity:
+            barys, arrows = pydec.simplex_quivers(cmp_complex, self.flux)
+            arrows = np.vstack((arrows[:, 1], -arrows[:, 0])).T
+            ax.quiver(
+                barys[:, 0],
+                barys[:, 1],
+                arrows[:, 0],
+                arrows[:, 1],
+                units="dots",
+                width=1,
+                scale=1.0 / 15.0,
+            )
 
     def save_anim(self, filename: str = "solution.gif", size: list[int] = [6, 6]):
+        """Save a nice-looking visualization of the solution
+        with the incoming wave added and velocity arrows removed.
+        Good for social media posting!"""
+
         sim_fwd = ForwardSolve(state=self.copy())
         fig = plt.figure(figsize=size)
         ax = fig.add_subplot(1, 1, 1)
@@ -170,7 +177,10 @@ class State:
         def step(_):
             ax.clear()
             sim_fwd.step()
-            sim_fwd.state._draw(ax)
+            inc_wave = eval_inc_wave_everywhere(sim_fwd.t)
+            (inc_wave.scaled(0.5) + sim_fwd.state)._draw(
+                ax, vlims=[-2, 2], draw_velocity=False
+            )
 
         anim = plt_anim.FuncAnimation(
             fig=fig,
@@ -183,6 +193,24 @@ class State:
         print(f"Saving {filename}. This takes a while")
         writer = plt_anim.FFMpegWriter(fps=int(1.0 / dt))
         anim.save(filename, writer)
+
+
+def eval_inc_wave_everywhere(t: float) -> State:
+    """Evaluate the incoming plane wave on every feature of the mesh.
+    Used to add the incoming wave to the final visualization."""
+
+    state = State()
+    for vert_idx in range(len(state.pressure)):
+        state.pressure[vert_idx] = eval_inc_wave_pressure(
+            t, cmp_complex[2].circumcenter[vert_idx]
+        )
+    for edge_idx in range(len(state.flux)):
+        if edge_idx in inner_bound_edges:
+            continue
+        state.flux[edge_idx] = eval_inc_wave_flux(
+            t + 0.5 * dt, cmp_complex[1].simplices[edge_idx]
+        )
+    return state
 
 
 #
@@ -352,4 +380,4 @@ print(f"Final energy: {energy}")
 
 approx_solution.draw()
 plt.show()
-# approx_solution.save_anim()
+approx_solution.save_anim()
