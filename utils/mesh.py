@@ -3,15 +3,22 @@ Functions for creating meshes with gmsh.
 Originally by Joona Räty, built upon by Mikael Myyrä.
 """
 
+from dataclasses import dataclass
 import gmsh
 import matplotlib.pyplot as plt
 import numpy as np
 import pydec
 
 
+@dataclass
+class ComplexAndMetadata:
+    complex: pydec.SimplicialComplex
+    edge_groups: dict[str, list[int]]
+
+
 def rect_unstructured(
     mesh_width: float, mesh_height: float, tri_radius: float
-) -> pydec.SimplicialMesh:
+) -> ComplexAndMetadata:
     """Create a rectangular triangle mesh with nonuniform triangle placement."""
 
     gmsh.initialize()
@@ -42,7 +49,7 @@ def rect_unstructured(
 
 def square_with_hole(
     outer_extent: float, inner_extent: float, tri_radius: float
-) -> pydec.SimplicialMesh:
+) -> ComplexAndMetadata:
     """Create a square mesh with nonuniform triangle placement
     and a hole in the middle."""
 
@@ -51,34 +58,42 @@ def square_with_hole(
 
     oe = outer_extent
     ie = inner_extent
-    gmsh.model.geo.addPoint(-oe, -oe, 0, tri_radius, 1)
-    gmsh.model.geo.addPoint(oe, -oe, 0, tri_radius, 2)
-    gmsh.model.geo.addPoint(oe, oe, 0, tri_radius, 3)
-    gmsh.model.geo.addPoint(-oe, oe, 0, tri_radius, 4)
+    btm_left = gmsh.model.geo.addPoint(-oe, -oe, 0, tri_radius)
+    btm_right = gmsh.model.geo.addPoint(oe, -oe, 0, tri_radius)
+    top_right = gmsh.model.geo.addPoint(oe, oe, 0, tri_radius)
+    top_left = gmsh.model.geo.addPoint(-oe, oe, 0, tri_radius)
 
-    gmsh.model.geo.addLine(1, 2, 1)
-    gmsh.model.geo.addLine(2, 3, 2)
-    gmsh.model.geo.addLine(3, 4, 3)
-    gmsh.model.geo.addLine(4, 1, 4)
+    btm = gmsh.model.geo.addLine(btm_left, btm_right)
+    right = gmsh.model.geo.addLine(btm_right, top_right)
+    top = gmsh.model.geo.addLine(top_right, top_left)
+    left = gmsh.model.geo.addLine(top_left, btm_left)
 
-    gmsh.model.geo.addCurveLoop([1, 2, 3, 4], 1)
+    outer_bounds = [btm, right, top, left]
+    gmsh.model.geo.addCurveLoop(outer_bounds)
 
-    gmsh.model.geo.addPoint(-ie, -ie, 0, tri_radius, 5)
-    gmsh.model.geo.addPoint(ie, -ie, 0, tri_radius, 6)
-    gmsh.model.geo.addPoint(ie, ie, 0, tri_radius, 7)
-    gmsh.model.geo.addPoint(-ie, ie, 0, tri_radius, 8)
+    btm_left = gmsh.model.geo.addPoint(-ie, -ie, 0, tri_radius)
+    btm_right = gmsh.model.geo.addPoint(ie, -ie, 0, tri_radius)
+    top_right = gmsh.model.geo.addPoint(ie, ie, 0, tri_radius)
+    top_left = gmsh.model.geo.addPoint(-ie, ie, 0, tri_radius)
 
-    gmsh.model.geo.addLine(5, 6, 5)
-    gmsh.model.geo.addLine(6, 7, 6)
-    gmsh.model.geo.addLine(7, 8, 7)
-    gmsh.model.geo.addLine(8, 5, 8)
+    btm = gmsh.model.geo.addLine(btm_left, btm_right)
+    right = gmsh.model.geo.addLine(btm_right, top_right)
+    top = gmsh.model.geo.addLine(top_right, top_left)
+    left = gmsh.model.geo.addLine(top_left, btm_left)
 
-    gmsh.model.geo.addCurveLoop([5, 6, 7, 8], 2)
-
+    inner_bounds = [btm, right, top, left]
+    gmsh.model.geo.addCurveLoop(inner_bounds)
     gmsh.model.geo.addPlaneSurface([1, 2], 1)
 
     gmsh.model.geo.synchronize()
+
+    gmsh.model.addPhysicalGroup(1, outer_bounds, name="outer boundary")
+    gmsh.model.addPhysicalGroup(1, inner_bounds, name="inner boundary")
+
     gmsh.model.mesh.generate(2)
+
+    gmsh.model.mesh.optimize("Laplace2D")
+
     return _finalize_mesh_2d()
 
 
@@ -116,7 +131,7 @@ def rect_uniform(
     return pydec.SimplicialMesh(V, E.astype("int32"))
 
 
-def annulus(inner_r: float, outer_r: float, refine_count: int) -> pydec.SimplicialMesh:
+def annulus(inner_r: float, outer_r: float, refine_count: int) -> ComplexAndMetadata:
     """Create a 2D unstructured mesh in the shape of an annulus,
     i.e. the area between two concentric circles, or a disk with a hole in the middle.
 
@@ -133,95 +148,63 @@ def annulus(inner_r: float, outer_r: float, refine_count: int) -> pydec.Simplici
     gmsh.model.occ.addPlaneSurface([outer_loop, inner_loop])
 
     gmsh.model.occ.synchronize()
+
+    gmsh.model.addPhysicalGroup(1, [outer_loop], name="outer boundary")
+    gmsh.model.addPhysicalGroup(1, [inner_loop], name="inner boundary")
+
     gmsh.model.mesh.generate(dim=2)
     for _ in range(refine_count):
         gmsh.model.mesh.refine()
 
+    gmsh.model.mesh.optimize("Laplace2D")
+
     return _finalize_mesh_2d()
 
 
-def cube_unstructured(
-    mesh_dim_x: float,
-    mesh_dim_y: float,
-    mesh_dim_z: float,
-    tri_radius: float,
-) -> pydec.SimplicialMesh:
-    """Create a 3D unstructured simplex mesh in the shape of a cube.
+def _finalize_mesh_2d() -> ComplexAndMetadata:
+    """Get the active mesh from gmsh and transform it to a PyDEC 2D mesh
+    along with possible edge group information for boundary identification."""
 
-    Currently unused."""
+    nodes = gmsh.model.mesh.getNodes()
+    # reshape into a list of (x, y, z) vectors
+    vertices = np.reshape(nodes[1], (int(len(nodes[1]) / 3), 3))
+    # delete the z coordinate since we're in 2D
+    vertices = np.delete(vertices, 2, 1)
 
-    gmsh.initialize()
-    gmsh.model.add("cub")
+    edges = np.array(gmsh.model.mesh.getElements(2)[2])
+    # reshape into groups of 3 per triangle,
+    # subtract 1 because gmsh vertex tags start from 1
+    edges = np.reshape(edges, (int(len(edges[0]) / 3), 3)) - 1
 
-    m = gmsh.model.geo
-
-    m.addPoint(0, 0, 0, tri_radius, 1)
-    m.addPoint(mesh_dim_x, 0, 0, tri_radius, 2)
-    m.addPoint(mesh_dim_x, mesh_dim_y, 0, tri_radius, 3)
-    m.addPoint(0, mesh_dim_y, 0, tri_radius, 4)
-    m.addPoint(0, 0, mesh_dim_z, tri_radius, 5)
-    m.addPoint(mesh_dim_x, 0, mesh_dim_z, tri_radius, 6)
-    m.addPoint(mesh_dim_x, mesh_dim_y, mesh_dim_z, tri_radius, 7)
-    m.addPoint(0, mesh_dim_y, mesh_dim_z, tri_radius, 8)
-
-    m.addLine(1, 2, 1)
-    m.addLine(2, 3, 2)
-    m.addLine(3, 4, 3)
-    m.addLine(4, 1, 4)
-    m.addLine(1, 5, 5)
-    m.addLine(2, 6, 6)
-    m.addLine(3, 7, 7)
-    m.addLine(4, 8, 8)
-    m.addLine(6, 5, 9)
-    m.addLine(7, 6, 10)
-    m.addLine(8, 7, 11)
-    m.addLine(5, 8, 12)
-
-    m.addCurveLoop([1, 2, 3, 4], 1)
-    m.addPlaneSurface([1], 1)
-    m.addCurveLoop([6, -10, -7, -2], 2)
-    m.addPlaneSurface([2], 2)
-    m.addCurveLoop([7, -11, -8, -3], 3)
-    m.addPlaneSurface([3], 3)
-    m.addCurveLoop([12, 11, 10, 9], 4)
-    m.addPlaneSurface([4], 4)
-    m.addCurveLoop([8, -12, -5, -4], 5)
-    m.addPlaneSurface([5], 5)
-    m.addCurveLoop([-1, 5, -9, -6], 6)
-    m.addPlaneSurface([6], 6)
-
-    m.addSurfaceLoop([1, 2, 3, 4, 5, 6], 1)
-    m.addVolume([1], 1)
-
-    gmsh.model.geo.synchronize()
-
-    gmsh.model.mesh.generate(3)
-    # gmsh.model.mesh.refine()
-    # gmsh.model.mesh.optimize("Netgen")
-    # gmsh.fltk.run()
-
-    b = gmsh.model.mesh.getNodes()[1]
-    V = np.reshape(b, (int(len(b) / 3), 3))
-
-    c = np.array(gmsh.model.mesh.getElements(3)[2])
-    E = np.reshape(c, (int(len(c[0]) / 4), 4)) - 1
+    # gather vertices identified with physical groups.
+    # as far as I can tell we can only get a list of vertices
+    # with no connectivity information from gmsh,
+    # so we can't directly produce a list of edges.
+    # thus we gather the vertices into a set we can compare edges to
+    # once we've built the PyDEC complex
+    vert_groups: dict[str, set[int]] = {}
+    for dim, tag in gmsh.model.getPhysicalGroups(1):
+        name = gmsh.model.getPhysicalName(dim, tag)
+        verts = gmsh.model.mesh.getNodesForPhysicalGroup(dim, tag)[0]
+        vert_groups[name] = set([int(vert) - 1 for vert in verts])
 
     gmsh.finalize()
-    return pydec.SimplicialMesh(V, E.astype("int32"))
 
+    mesh = pydec.SimplicialMesh(vertices, edges.astype("int32"))
+    complex = pydec.SimplicialComplex(mesh)
 
-def _finalize_mesh_2d() -> pydec.SimplicialMesh:
-    """Get the active mesh from gmsh and transform it to a PyDEC 2D mesh."""
+    # now that we have the complex we can iterate over edges
+    # and see which edges have vertices belonging to groups
+    edge_groups: dict[str, list[int]] = {name: [] for name in vert_groups.keys()}
+    for edge_idx, edge in enumerate(complex[1].simplices):
+        for name, group in vert_groups.items():
+            if edge[0] in group and edge[1] in group:
+                edge_groups[name].append(edge_idx)
 
-    b = gmsh.model.mesh.getNodes()[1]
-    B = np.reshape(b, (int(len(b) / 3), 3))
-    V = np.delete(B, 2, 1)
-
-    c = np.array(gmsh.model.mesh.getElements(2)[2])
-    E = np.reshape(c, (int(len(c[0]) / 3), 3)) - 1
-
-    gmsh.finalize()
-    return pydec.SimplicialMesh(V, E.astype("int32"))
+    return ComplexAndMetadata(
+        complex=complex,
+        edge_groups=edge_groups,
+    )
 
 
 def _plot_test_cases():
@@ -236,7 +219,7 @@ def _plot_test_cases():
 
     # unstructured triangle mesh
 
-    mesh = rect_unstructured(np.pi, np.pi, 0.3)
+    mesh = rect_unstructured(np.pi, np.pi, 0.3).complex.mesh
     plt.figure(figsize=(8, 8), dpi=80)
     plt.triplot(mesh.vertices[:, 0], mesh.vertices[:, 1], mesh.indices)
     plt.show()

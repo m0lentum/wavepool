@@ -15,7 +15,6 @@ import numpy as np
 import numpy.typing as npt
 import math
 import matplotlib.pyplot as plt
-import pydec
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -23,25 +22,9 @@ from typing import Iterable
 scatterer_radius = 1.0
 outer_edge_radius = 3.0
 cmp_mesh = mesh.annulus(scatterer_radius, outer_edge_radius, refine_count=1)
-cmp_complex = pydec.SimplicialComplex(cmp_mesh)
-
-
-# gather sets of inner and outer boundary edges
-# for applying different boundary conditions to each
-inner_bound_edges: list[pydec.Simplex] = []
-outer_bound_edges: list[pydec.Simplex] = []
-# distinguish between boundaries by checking squared distance from origin
-# (TODO: this won't work for more complicated mesh shapes.
-# can we label these somehow with gmsh instead?
-# another option would be to use the orientation of the edge and triangle it's part of)
-middle_dist_sq = ((outer_edge_radius + scatterer_radius) / 2.0) ** 2
-for edge in cmp_complex.boundary():
-    edge_verts = edge.boundary()
-    test_vert = cmp_mesh.vertices[cmp_complex[0].simplex_to_index.get(edge_verts[0])]
-    if np.dot(test_vert, test_vert) < middle_dist_sq and edge not in inner_bound_edges:
-        inner_bound_edges.append(edge)
-    elif edge not in outer_bound_edges:
-        outer_bound_edges.append(edge)
+cmp_complex = cmp_mesh.complex
+inner_bound_edges: list[int] = cmp_mesh.edge_groups["inner boundary"]
+outer_bound_edges: list[int] = cmp_mesh.edge_groups["outer boundary"]
 
 
 # for each outer boundary edge, find the triangle this edge is part of
@@ -54,15 +37,11 @@ class BoundaryEdgeInfo:
 
 
 outer_bound_infos: list[BoundaryEdgeInfo] = []
-for edge in outer_bound_edges:
-    edge_idx = cmp_complex[1].simplex_to_index.get(edge)
+for edge_idx in outer_bound_edges:
     # find the triangle using the incidence matrix
     tri_indices = cmp_complex[1].d[:, edge_idx].nonzero()[0]
     assert len(tri_indices) == 1, "boundary edge is part of one triangle only"
-    edge_ends = [
-        cmp_complex.vertices[cmp_complex[0].simplex_to_index.get(v)]
-        for v in edge.boundary()
-    ]
+    edge_ends = [cmp_complex.vertices[v] for v in cmp_complex[1].simplices[edge_idx]]
     outer_bound_infos.append(
         BoundaryEdgeInfo(
             dual_vert_idx=tri_indices[0],
@@ -112,18 +91,13 @@ class CircleScatterer(Simulation):
         t_at_w = self.t + 0.5 * self.dt
         self.q += self.q_step_mat * self.v
         # incoming wave on the scatterer's surface
-        for bound_edge in inner_bound_edges:
-            edge_idx = cmp_complex[1].simplex_to_index.get(bound_edge)
+        for edge_idx in inner_bound_edges:
             self.q[edge_idx] = self._eval_inc_wave_flux(
                 t_at_w,
-                [
-                    self.complex[0].simplex_to_index.get(v)
-                    for v in bound_edge.boundary()
-                ],
+                cmp_complex[1].simplices[edge_idx],
             )
         # absorbing outer boundary condition
-        for bound_edge, edge_info in zip(outer_bound_edges, outer_bound_infos):
-            edge_idx = cmp_complex[1].simplex_to_index.get(bound_edge)
+        for edge_idx, edge_info in zip(outer_bound_edges, outer_bound_infos):
             self.q[edge_idx] = (
                 -self.v[edge_info.dual_vert_idx]
                 * edge_info.length

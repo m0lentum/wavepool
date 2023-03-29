@@ -14,7 +14,6 @@ import numpy as np
 import numpy.typing as npt
 import math
 import matplotlib.pyplot as plt
-import pydec
 from typing import Iterable
 
 
@@ -23,7 +22,7 @@ class AccuracyTest(Simulation):
         # mesh parameters
         mesh_dim = np.pi
         cmp_mesh = mesh.rect_unstructured(mesh_dim, mesh_dim, elem_size)
-        cmp_complex = pydec.SimplicialComplex(cmp_mesh)
+        cmp_complex = cmp_mesh.complex
 
         # time parameters
         sim_time = 2.0 * np.pi

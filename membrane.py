@@ -16,13 +16,12 @@ from utils import animate as anim
 from utils.sim_runner import Simulation
 
 import numpy as np
-import pydec
 
 mesh_dim = np.pi
 verts_per_side = 20
 mesh_scale = mesh_dim / verts_per_side
 cmp_mesh = mesh.rect_unstructured(mesh_dim, mesh_dim, mesh_scale)
-cmp_complex = pydec.SimplicialComplex(cmp_mesh)
+cmp_complex = cmp_mesh.complex
 
 
 class StandingWave(Simulation):

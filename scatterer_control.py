@@ -24,24 +24,9 @@ from typing import Callable, Iterable
 # too bad quality to get good results with the controllability method.
 # TODO: optimize the mesh so we can use a larger variety of shapes
 cmp_mesh = mesh.square_with_hole(np.pi * 2.0, np.pi / 3.0, np.pi / 6.0)
-cmp_complex = pydec.SimplicialComplex(cmp_mesh)
-
-
-# gather sets of inner and outer boundary edges
-# for applying different boundary conditions to each
-inner_bound_edges: list[pydec.Simplex] = []
-outer_bound_edges: list[pydec.Simplex] = []
-# distinguish between boundaries by checking squared distance from origin.
-# TODO: this is a remnant of the old circle mesh and is very limiting.
-# use gmsh tags or edge orientation instead
-middle_dist_sq = 2.0**2
-for edge in cmp_complex.boundary():
-    edge_verts = edge.boundary()
-    test_vert = cmp_mesh.vertices[cmp_complex[0].simplex_to_index.get(edge_verts[0])]
-    if np.dot(test_vert, test_vert) < middle_dist_sq and edge not in inner_bound_edges:
-        inner_bound_edges.append(edge)
-    elif edge not in outer_bound_edges:
-        outer_bound_edges.append(edge)
+cmp_complex = cmp_mesh.complex
+inner_bound_edges: list[int] = cmp_mesh.edge_groups["inner boundary"]
+outer_bound_edges: list[int] = cmp_mesh.edge_groups["outer boundary"]
 
 
 # for each outer boundary edge, find the triangle this edge is part of
@@ -54,15 +39,11 @@ class BoundaryEdgeInfo:
 
 
 outer_bound_infos: list[BoundaryEdgeInfo] = []
-for edge in outer_bound_edges:
-    edge_idx = cmp_complex[1].simplex_to_index.get(edge)
+for edge_idx in outer_bound_edges:
     # find the triangle using the incidence matrix
     tri_indices = cmp_complex[1].d[:, edge_idx].nonzero()[0]
     assert len(tri_indices) == 1, "boundary edge is part of one triangle only"
-    edge_ends = [
-        cmp_complex.vertices[cmp_complex[0].simplex_to_index.get(v)]
-        for v in edge.boundary()
-    ]
+    edge_ends = [cmp_complex.vertices[v] for v in cmp_complex[1].simplices[edge_idx]]
     outer_bound_infos.append(
         BoundaryEdgeInfo(
             dual_vert_idx=tri_indices[0],
@@ -70,7 +51,6 @@ for edge in outer_bound_edges:
             length=np.linalg.norm(edge_ends[1] - edge_ends[0]),
         )
     )
-
 
 #
 # simulation parameters and helpers
@@ -224,17 +204,13 @@ class ForwardSolve:
         t_at_w = self.t + 0.5 * dt
         self.state.flux += q_step_mat * self.state.pressure
         # incoming wave on the scatterer's surface
-        for bound_edge in inner_bound_edges:
-            edge_idx = cmp_complex[1].simplex_to_index.get(bound_edge)
+        for edge_idx in inner_bound_edges:
             self.state.flux[edge_idx] = source_term_scaling(
                 t_at_w
-            ) * eval_inc_wave_flux(
-                t_at_w,
-                [cmp_complex[0].simplex_to_index.get(v) for v in bound_edge.boundary()],
-            )
+            ) * eval_inc_wave_flux(t_at_w, cmp_complex[1].simplices[edge_idx])
+
         # absorbing outer boundary condition
-        for bound_edge, edge_info in zip(outer_bound_edges, outer_bound_infos):
-            edge_idx = cmp_complex[1].simplex_to_index.get(bound_edge)
+        for edge_idx, edge_info in zip(outer_bound_edges, outer_bound_infos):
             self.state.flux[edge_idx] = (
                 -self.state.pressure[edge_info.dual_vert_idx]
                 * edge_info.length
@@ -251,13 +227,11 @@ class BackwardSolve:
 
         self.state.flux += p_step_mat.T * self.state.pressure
         # inner Dirichlet boundary without source term
-        for bound_edge in inner_bound_edges:
-            edge_idx = cmp_complex[1].simplex_to_index.get(bound_edge)
+        for edge_idx in inner_bound_edges:
             self.state.flux[edge_idx] = 0.0
         # absorbing outer boundary
         # with flipped sign due to going backward in time
-        for bound_edge, edge_info in zip(outer_bound_edges, outer_bound_infos):
-            edge_idx = cmp_complex[1].simplex_to_index.get(bound_edge)
+        for edge_idx, edge_info in zip(outer_bound_edges, outer_bound_infos):
             self.state.flux[edge_idx] = (
                 self.state.pressure[edge_info.dual_vert_idx]
                 * edge_info.length
