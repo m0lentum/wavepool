@@ -18,7 +18,7 @@ For now, curious readers can check out [my notes][notes]).
 
 ## Simulations in this repo
 
-Each Python file in the root directory implements a simulation.
+Each Python file in the root `src/` directory implements a simulation.
 `scatterer_control.py` implements the full DEC + exact controllability stack.
 The rest are simpler cases designed for learning to use DEC
 and testing parts of the implementation independently.
