@@ -6,6 +6,7 @@ to find a time-harmonic solution.
 
 from utils import mesh
 
+import argparse
 import numpy as np
 import numpy.typing as npt
 import math
@@ -15,15 +16,37 @@ import pydec
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
+#
+# command line parameters
+#
+
+arg_parser = argparse.ArgumentParser(prog="scatterer_control")
+arg_parser.add_argument(
+    "--shape",
+    choices=["square", "star"],
+    default="square",
+    help="shape of the scatterer object",
+)
+args = arg_parser.parse_args()
 
 #
 # mesh generation
 #
 
-# the original circle mesh used for this turned out to be
-# too bad quality to get good results with the controllability method.
-# TODO: optimize the mesh so we can use a larger variety of shapes
-cmp_mesh = mesh.square_with_hole(np.pi * 2.0, np.pi / 3.0, np.pi / 6.0)
+if args.shape == "square":
+    cmp_mesh = mesh.square_with_hole(np.pi * 2.0, np.pi / 3.0, np.pi / 6.0)
+elif args.shape == "star":
+    cmp_mesh = mesh.star(
+        point_count=8,
+        inner_r=np.pi / 6.0,
+        outer_r=np.pi,
+        domain_r=np.pi * 2.0,
+        elem_size=np.pi / 6.0,
+    )
+else:
+    # unreachable because argparse will throw an error,
+    # exit to satisfy pyright's type checking
+    exit()
 cmp_complex = cmp_mesh.complex
 inner_bound_edges: list[int] = cmp_mesh.edge_groups["inner boundary"]
 outer_bound_edges: list[int] = cmp_mesh.edge_groups["outer boundary"]
@@ -165,7 +188,12 @@ class State:
                 scale=1.0 / 15.0,
             )
 
-    def save_anim(self, filename: str = "solution.gif", size: list[int] = [6, 6]):
+    def save_anim(
+        self,
+        filename: str = "solution.gif",
+        size: list[int] = [6, 6],
+        with_incident_wave: bool = True,
+    ):
         """Save a nice-looking visualization of the solution
         with the incoming wave added and velocity arrows removed.
         Good for social media posting!"""
@@ -177,10 +205,12 @@ class State:
         def step(_):
             ax.clear()
             sim_fwd.step()
-            inc_wave = eval_inc_wave_everywhere(sim_fwd.t)
-            (inc_wave.scaled(0.5) + sim_fwd.state)._draw(
-                ax, vlims=[-2, 2], draw_velocity=False
-            )
+            if with_incident_wave:
+                inc_wave = eval_inc_wave_everywhere(sim_fwd.t)
+                vis_wave = inc_wave.scaled(0.5) + sim_fwd.state
+            else:
+                vis_wave = sim_fwd.state
+            vis_wave._draw(ax, vlims=[-2, 2], draw_velocity=False)
 
         anim = plt_anim.FuncAnimation(
             fig=fig,
@@ -361,6 +391,8 @@ resid_norm_sq = initial_resid_norm_sq
 search_dir = residual.copy()
 
 for i in range(max_iterations):
+    print(f"Residual norm: {math.sqrt(resid_norm_sq)}")
+
     resid_update = compute_cost_gradient(search_dir, use_source_terms=False).gradient
     solution_update_param = resid_norm_sq / resid_update.dot(search_dir)
     approx_solution += search_dir.scaled(solution_update_param)
@@ -380,4 +412,4 @@ print(f"Final energy: {energy}")
 
 approx_solution.draw()
 plt.show()
-approx_solution.save_anim()
+# approx_solution.save_anim(with_incident_wave=True)

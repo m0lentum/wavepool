@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import gmsh
 import matplotlib.pyplot as plt
 import numpy as np
+import math
 import pydec
 
 
@@ -17,17 +18,17 @@ class ComplexAndMetadata:
 
 
 def rect_unstructured(
-    mesh_width: float, mesh_height: float, tri_radius: float
+    mesh_width: float, mesh_height: float, elem_size: float
 ) -> ComplexAndMetadata:
     """Create a rectangular triangle mesh with nonuniform triangle placement."""
 
     gmsh.initialize()
     gmsh.model.add("rec")
 
-    gmsh.model.geo.addPoint(0, 0, 0, tri_radius, 1)
-    gmsh.model.geo.addPoint(mesh_width, 0, 0, tri_radius, 2)
-    gmsh.model.geo.addPoint(mesh_width, mesh_height, 0, tri_radius, 3)
-    gmsh.model.geo.addPoint(0, mesh_height, 0, tri_radius, 4)
+    gmsh.model.geo.addPoint(0, 0, 0, elem_size, 1)
+    gmsh.model.geo.addPoint(mesh_width, 0, 0, elem_size, 2)
+    gmsh.model.geo.addPoint(mesh_width, mesh_height, 0, elem_size, 3)
+    gmsh.model.geo.addPoint(0, mesh_height, 0, elem_size, 4)
 
     gmsh.model.geo.addLine(1, 2, 1)
     gmsh.model.geo.addLine(2, 3, 2)
@@ -48,7 +49,7 @@ def rect_unstructured(
 
 
 def square_with_hole(
-    outer_extent: float, inner_extent: float, tri_radius: float
+    outer_extent: float, inner_extent: float, elem_size: float
 ) -> ComplexAndMetadata:
     """Create a square mesh with nonuniform triangle placement
     and a hole in the middle."""
@@ -58,10 +59,10 @@ def square_with_hole(
 
     oe = outer_extent
     ie = inner_extent
-    btm_left = gmsh.model.geo.addPoint(-oe, -oe, 0, tri_radius)
-    btm_right = gmsh.model.geo.addPoint(oe, -oe, 0, tri_radius)
-    top_right = gmsh.model.geo.addPoint(oe, oe, 0, tri_radius)
-    top_left = gmsh.model.geo.addPoint(-oe, oe, 0, tri_radius)
+    btm_left = gmsh.model.geo.addPoint(-oe, -oe, 0, elem_size)
+    btm_right = gmsh.model.geo.addPoint(oe, -oe, 0, elem_size)
+    top_right = gmsh.model.geo.addPoint(oe, oe, 0, elem_size)
+    top_left = gmsh.model.geo.addPoint(-oe, oe, 0, elem_size)
 
     btm = gmsh.model.geo.addLine(btm_left, btm_right)
     right = gmsh.model.geo.addLine(btm_right, top_right)
@@ -69,12 +70,12 @@ def square_with_hole(
     left = gmsh.model.geo.addLine(top_left, btm_left)
 
     outer_bounds = [btm, right, top, left]
-    gmsh.model.geo.addCurveLoop(outer_bounds)
+    outer_loop = gmsh.model.geo.addCurveLoop(outer_bounds)
 
-    btm_left = gmsh.model.geo.addPoint(-ie, -ie, 0, tri_radius)
-    btm_right = gmsh.model.geo.addPoint(ie, -ie, 0, tri_radius)
-    top_right = gmsh.model.geo.addPoint(ie, ie, 0, tri_radius)
-    top_left = gmsh.model.geo.addPoint(-ie, ie, 0, tri_radius)
+    btm_left = gmsh.model.geo.addPoint(-ie, -ie, 0, elem_size)
+    btm_right = gmsh.model.geo.addPoint(ie, -ie, 0, elem_size)
+    top_right = gmsh.model.geo.addPoint(ie, ie, 0, elem_size)
+    top_left = gmsh.model.geo.addPoint(-ie, ie, 0, elem_size)
 
     btm = gmsh.model.geo.addLine(btm_left, btm_right)
     right = gmsh.model.geo.addLine(btm_right, top_right)
@@ -82,8 +83,8 @@ def square_with_hole(
     left = gmsh.model.geo.addLine(top_left, btm_left)
 
     inner_bounds = [btm, right, top, left]
-    gmsh.model.geo.addCurveLoop(inner_bounds)
-    gmsh.model.geo.addPlaneSurface([1, 2], 1)
+    inner_loop = gmsh.model.geo.addCurveLoop(inner_bounds)
+    gmsh.model.geo.addPlaneSurface([outer_loop, inner_loop])
 
     gmsh.model.geo.synchronize()
 
@@ -97,38 +98,82 @@ def square_with_hole(
     return _finalize_mesh_2d()
 
 
-def rect_uniform(
-    mesh_width: float, mesh_height: float, tri_radius: float
-) -> pydec.SimplicialMesh:
-    """Create a rectangular triangle mesh with uniform triangle size and alignment."""
+def star(
+    point_count: int, inner_r: float, outer_r: float, domain_r: float, elem_size: float
+) -> ComplexAndMetadata:
+    """Create a 2D unstructured mesh in the shape of
+    a square with a star-shaped hole in the center."""
 
-    nx = int(np.ceil(mesh_width / tri_radius)) + 1
-    dx = mesh_width / (nx - 1)
-    ny = int(np.round(mesh_height / (0.866 * dx))) + 1
-    dy = mesh_height / (ny - 1)
-    evenr = np.linspace(0, mesh_width, nx)
-    oddr = np.linspace(-dx / 2, mesh_width + dx / 2, nx + 1)
-    oddr[0] += dx / 2
-    oddr[-1] -= dx / 2
-    V = np.empty((0, 2))
-    for i in range(ny):
-        if i % 2 == 0:
-            row = np.vstack((evenr, i * dy * np.ones(nx))).T
-        else:
-            row = np.vstack((oddr, i * dy * np.ones(nx + 1))).T
-        V = np.vstack((V, row))
-    T = np.array([[0, nx, nx + 1], [0, nx + 1, 1]])
-    RE = np.empty((0, 3))
-    for i in range(nx):
-        RE = np.vstack((RE, T + i))
-    E = np.empty((0, 3))
-    for i in range(ny - 1):
-        if i % 2 == 0:
-            row = RE[:-1] + int(i / 2) * (2 * nx + 1)
-        else:
-            row = RE[1:] + int((i - 1) / 2) * (2 * nx + 1) + nx
-        E = np.vstack((E, row))
-    return pydec.SimplicialMesh(V, E.astype("int32"))
+    gmsh.initialize()
+    gmsh.model.add("star")
+
+    # outer square boundary
+
+    btm_left = gmsh.model.geo.addPoint(-domain_r, -domain_r, 0, elem_size)
+    btm_right = gmsh.model.geo.addPoint(domain_r, -domain_r, 0, elem_size)
+    top_right = gmsh.model.geo.addPoint(domain_r, domain_r, 0, elem_size)
+    top_left = gmsh.model.geo.addPoint(-domain_r, domain_r, 0, elem_size)
+
+    btm = gmsh.model.geo.addLine(btm_left, btm_right)
+    right = gmsh.model.geo.addLine(btm_right, top_right)
+    top = gmsh.model.geo.addLine(top_right, top_left)
+    left = gmsh.model.geo.addLine(top_left, btm_left)
+
+    outer_bounds = [btm, right, top, left]
+    outer_loop = gmsh.model.geo.addCurveLoop(outer_bounds)
+
+    # inner star boundary
+
+    assert point_count >= 2, "star must have at least two points"
+    half_angle_increment = math.pi / point_count
+    first_star_vert = None
+    latest_star_vert = None
+    star_lines = []
+    for i in range(point_count):
+        # place two vertices per iteration,
+        # one at the end of a point of the star and one at the base
+        outer_angle = 2 * i * half_angle_increment
+        inner_angle = outer_angle + half_angle_increment
+        # starting at (0, 1) so that odd numbers of points
+        # give a horizontally symmetrical star
+        outer_vert = gmsh.model.geo.addPoint(
+            -math.sin(outer_angle) * outer_r,
+            math.cos(outer_angle) * outer_r,
+            0,
+            elem_size,
+        )
+        inner_vert = gmsh.model.geo.addPoint(
+            -math.sin(inner_angle) * inner_r,
+            math.cos(inner_angle) * inner_r,
+            0,
+            elem_size,
+        )
+
+        if latest_star_vert is not None:
+            star_lines.append(gmsh.model.geo.addLine(latest_star_vert, outer_vert))
+        star_lines.append(gmsh.model.geo.addLine(outer_vert, inner_vert))
+
+        if first_star_vert is None:
+            first_star_vert = outer_vert
+        latest_star_vert = inner_vert
+
+    star_lines.append(gmsh.model.geo.addLine(latest_star_vert, first_star_vert))
+
+    inner_loop = gmsh.model.geo.addCurveLoop(star_lines)
+
+    gmsh.model.geo.addPlaneSurface([outer_loop, inner_loop])
+
+    # finalize
+
+    gmsh.model.geo.synchronize()
+
+    gmsh.model.addPhysicalGroup(1, outer_bounds, name="outer boundary")
+    gmsh.model.addPhysicalGroup(1, star_lines, name="inner boundary")
+
+    gmsh.model.mesh.generate(2)
+    gmsh.model.mesh.optimize("Laplace2D", niter=10)
+
+    return _finalize_mesh_2d()
 
 
 def annulus(inner_r: float, outer_r: float, refine_count: int) -> ComplexAndMetadata:
@@ -209,13 +254,6 @@ def _finalize_mesh_2d() -> ComplexAndMetadata:
 
 def _plot_test_cases():
     """Visualize some test cases. Called when this file is run as a standalone script."""
-
-    # triangle mesh with a uniform axis-aligned structure
-
-    plt.figure(figsize=(8, 8), dpi=80)
-    mesh = rect_uniform(1, 1, 0.3)
-    plt.triplot(mesh.vertices[:, 0], mesh.vertices[:, 1], mesh.indices)
-    plt.show()
 
     # unstructured triangle mesh
 
