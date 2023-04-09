@@ -23,9 +23,22 @@ from typing import Callable, Iterable
 arg_parser = argparse.ArgumentParser(prog="scatterer_control")
 arg_parser.add_argument(
     "--shape",
-    choices=["square", "star"],
+    choices=["square", "star", "diamonds"],
     default="square",
     help="shape of the scatterer object",
+)
+arg_parser.add_argument(
+    "--inc-angle",
+    dest="inc_angle",
+    type=float,
+    default=90.0,
+    help="angle of the incoming wave's propagating direction in degrees",
+)
+arg_parser.add_argument(
+    "--no-inc-wave",
+    dest="no_inc_wave",
+    action="store_true",
+    help="hide the incoming wave in the animated visualization",
 )
 args = arg_parser.parse_args()
 
@@ -34,13 +47,23 @@ args = arg_parser.parse_args()
 #
 
 if args.shape == "square":
-    cmp_mesh = mesh.square_with_hole(np.pi * 2.0, np.pi / 3.0, np.pi / 6.0)
+    cmp_mesh = mesh.square_with_hole(
+        outer_extent=np.pi * 2.0, inner_extent=np.pi / 3.0, elem_size=np.pi / 6.0
+    )
 elif args.shape == "star":
     cmp_mesh = mesh.star(
-        point_count=8,
-        inner_r=np.pi / 6.0,
+        point_count=5,
+        inner_r=np.pi / 3.0,
         outer_r=np.pi,
         domain_r=np.pi * 2.0,
+        elem_size=np.pi / 6.0,
+    )
+elif args.shape == "diamonds":
+    cmp_mesh = mesh.diamond_lattice(
+        domain_radius=np.pi * 2.0,
+        horizontal_divs=4,
+        vertical_divs=2,
+        gap_size=np.pi / 6.0,
         elem_size=np.pi / 6.0,
     )
 else:
@@ -81,7 +104,8 @@ for edge_idx in outer_bound_edges:
 
 # incoming wave parameters
 inc_wavenumber = 1.0
-inc_wave_dir = np.array([0.0, 1.0])
+inc_angle = args.inc_angle * 2.0 * np.pi / 360.0
+inc_wave_dir = np.array([math.cos(inc_angle), math.sin(inc_angle)])
 inc_wave_vector = inc_wavenumber * inc_wave_dir
 # angular velocity of the wave in radians per second
 inc_angular_vel = 2.0
@@ -412,4 +436,4 @@ print(f"Final energy: {energy}")
 
 approx_solution.draw()
 plt.show()
-# approx_solution.save_anim(with_incident_wave=True)
+approx_solution.save_anim(with_incident_wave=not args.no_inc_wave)

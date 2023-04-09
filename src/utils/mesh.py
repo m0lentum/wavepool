@@ -98,6 +98,76 @@ def square_with_hole(
     return _finalize_mesh_2d()
 
 
+def diamond_lattice(
+    domain_radius: float,
+    horizontal_divs: int,
+    vertical_divs: int,
+    gap_size: float,
+    elem_size: float,
+) -> ComplexAndMetadata:
+    """Create a 2D unstructured mesh with several diamond-shaped holes
+    arranged into a regular lattice."""
+
+    gmsh.initialize()
+    gmsh.model.add("lattice")
+
+    # outer boundary
+
+    dr = domain_radius
+    btm_left = gmsh.model.geo.addPoint(-dr, -dr, 0, elem_size)
+    btm_right = gmsh.model.geo.addPoint(dr, -dr, 0, elem_size)
+    top_right = gmsh.model.geo.addPoint(dr, dr, 0, elem_size)
+    top_left = gmsh.model.geo.addPoint(-dr, dr, 0, elem_size)
+
+    btm = gmsh.model.geo.addLine(btm_left, btm_right)
+    right = gmsh.model.geo.addLine(btm_right, top_right)
+    top = gmsh.model.geo.addLine(top_right, top_left)
+    left = gmsh.model.geo.addLine(top_left, btm_left)
+
+    outer_bounds = [btm, right, top, left]
+    outer_loop = gmsh.model.geo.addCurveLoop(outer_bounds)
+
+    # inner diamond holes
+
+    hole_width = (2 * domain_radius - gap_size) / horizontal_divs - gap_size
+    hole_height = (2 * domain_radius - gap_size) / vertical_divs - gap_size
+    inner_bounds = []
+    inner_loops = []
+    for x_idx in range(horizontal_divs):
+        left_x = -domain_radius + (gap_size + hole_width) * x_idx + gap_size
+        right_x = left_x + hole_width
+        middle_x = (left_x + right_x) / 2.0
+        for y_idx in range(vertical_divs):
+            btm_y = -domain_radius + (gap_size + hole_height) * y_idx + gap_size
+            top_y = btm_y + hole_height
+            middle_y = (btm_y + top_y) / 2.0
+
+            btm = gmsh.model.geo.addPoint(middle_x, btm_y, 0, elem_size)
+            right = gmsh.model.geo.addPoint(right_x, middle_y, 0, elem_size)
+            top = gmsh.model.geo.addPoint(middle_x, top_y, 0, elem_size)
+            left = gmsh.model.geo.addPoint(left_x, middle_y, 0, elem_size)
+            edges = [
+                gmsh.model.geo.addLine(btm, right),
+                gmsh.model.geo.addLine(right, top),
+                gmsh.model.geo.addLine(top, left),
+                gmsh.model.geo.addLine(left, btm),
+            ]
+            inner_bounds.extend(edges)
+            inner_loops.append(gmsh.model.geo.addCurveLoop(edges))
+
+    gmsh.model.geo.addPlaneSurface([outer_loop, *inner_loops])
+
+    gmsh.model.geo.synchronize()
+
+    gmsh.model.addPhysicalGroup(1, outer_bounds, name="outer boundary")
+    gmsh.model.addPhysicalGroup(1, inner_bounds, name="inner boundary")
+
+    gmsh.model.mesh.generate(2)
+    gmsh.model.mesh.optimize("Laplace2D")
+
+    return _finalize_mesh_2d()
+
+
 def star(
     point_count: int, inner_r: float, outer_r: float, domain_r: float, elem_size: float
 ) -> ComplexAndMetadata:
