@@ -104,7 +104,7 @@ class CircleScatterer(Simulation):
                 * edge_info.orientation
             )
 
-    def _eval_inc_wave_pressure(self, t, position: npt.NDArray) -> float:
+    def _eval_inc_wave_pressure(self, t: float, position: npt.NDArray) -> float:
         """Evaluate the value of v for the incoming plane wave at a point."""
 
         return self.inc_angular_vel * math.sin(
@@ -129,8 +129,43 @@ class CircleScatterer(Simulation):
                 math.cos(wave_angle - kdotp) - math.cos(wave_angle - kdotp - kdotl)
             )
 
+    def get_pressure_with_inc_wave(
+        self, inc_wave_scaling: float = 0.5
+    ) -> npt.NDArray[np.float64]:
+        """Sum pressure of the scattered wave with that of the incident wave.
+        Used for visualization."""
+
+        inc_wave: npt.NDArray[np.float64] = np.zeros(cmp_complex[2].num_simplices)
+        for vert_idx in range(len(inc_wave)):
+            inc_wave[vert_idx] = self._eval_inc_wave_pressure(
+                self.t, cmp_complex[2].circumcenter[vert_idx]
+            )
+        return self.v + inc_wave_scaling * inc_wave
+
+    def get_flux_with_inc_wave(
+        self, inc_wave_scaling: float = 0.5
+    ) -> npt.NDArray[np.float64]:
+        """Sum pressure of the scattered wave with that of the incident wave.
+        Used for visualization."""
+
+        inc_wave: npt.NDArray[np.float64] = np.zeros(cmp_complex[1].num_simplices)
+        for edge_idx in range(len(inc_wave)):
+            if edge_idx in inner_bound_edges:
+                continue
+            inc_wave[edge_idx] = self._eval_inc_wave_flux(
+                self.t + 0.5 * self.dt, cmp_complex[1].simplices[edge_idx]
+            )
+        return self.q + inc_wave_scaling * inc_wave
+
 
 sim = CircleScatterer()
-vis = anim.FluxAndPressure(sim=sim, arrow_scale=20)
+vis = anim.FluxAndPressure(
+    sim=sim,
+    arrow_scale=20,
+    vmin=-3,
+    vmax=3,
+    get_pressure=lambda s: s.get_pressure_with_inc_wave(),
+    get_flux=lambda s: s.get_flux_with_inc_wave(),
+)
 vis.show()
-# vis.save()
+vis.save()
