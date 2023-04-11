@@ -28,6 +28,20 @@ arg_parser.add_argument(
     help="shape of the scatterer object",
 )
 arg_parser.add_argument(
+    "--star-points",
+    dest="star_points",
+    type=int,
+    default=8,
+    help="number of points in the star, only effective if --shape star is also given",
+)
+arg_parser.add_argument(
+    "--max-iters",
+    dest="max_iters",
+    type=int,
+    default=50,
+    help="maximum iteration count for the conjugate gradient algorithm",
+)
+arg_parser.add_argument(
     "--inc-angle",
     dest="inc_angle",
     type=float,
@@ -39,6 +53,12 @@ arg_parser.add_argument(
     dest="no_inc_wave",
     action="store_true",
     help="hide the incoming wave in the animated visualization",
+)
+arg_parser.add_argument(
+    "--save-gif",
+    dest="save_gif",
+    action="store_true",
+    help="save an animated .gif of the solution",
 )
 args = arg_parser.parse_args()
 
@@ -52,7 +72,7 @@ if args.shape == "square":
     )
 elif args.shape == "star":
     cmp_mesh = mesh.star(
-        point_count=5,
+        point_count=args.star_points,
         inner_r=np.pi / 3.0,
         outer_r=np.pi,
         domain_r=np.pi * 2.0,
@@ -163,11 +183,17 @@ class State:
     def copy(self):
         return State(pressure=self.pressure.copy(), flux=self.flux.copy())
 
-    def dot(self, other):
-        return np.dot(self.pressure, other.pressure) + np.dot(self.flux, other.flux)
-
     def scaled(self, s: float):
         return State(pressure=s * self.pressure, flux=s * self.flux)
+
+    def dot(self, other) -> float:
+        return np.dot(self.pressure, other.pressure) + np.dot(self.flux, other.flux)
+
+    def energy(self) -> float:
+        """Control energy of the exact controllability problem.
+        `self` is assumed to be the difference
+        between a wave period's beginning state and end state."""
+        return 0.5 * self.dot(self)
 
     def __add__(self, other):
         return State(
@@ -332,7 +358,7 @@ class GradientResult:
     forward_diff: State
 
     def energy(self) -> float:
-        return 0.5 * self.forward_diff.dot(self.forward_diff)
+        return self.forward_diff.energy()
 
 
 def compute_cost_gradient(
@@ -376,6 +402,15 @@ def compute_cost_gradient(
     )
 
 
+def compute_control_energy(state: State) -> float:
+    """Compute the control energy of a given initial state."""
+
+    period_sim = ForwardSolve(state.copy())
+    for _ in range(steps_per_period):
+        period_sim.step()
+    return (period_sim.state - state).energy()
+
+
 #
 # running the simulation
 #
@@ -406,17 +441,23 @@ initial_state = transition_sim.state
 # begin conjugate gradient optimization
 
 stop_condition_sq = (1e-2) ** 2
-max_iterations = 50
-
 approx_solution = initial_state.copy()
 residual = -compute_cost_gradient(approx_solution, use_source_terms=True).gradient
 initial_resid_norm_sq = residual.dot(residual)
 resid_norm_sq = initial_resid_norm_sq
 search_dir = residual.copy()
+# measurements
+control_energies: list[float] = [compute_control_energy(approx_solution)]
+resid_norms: list[float] = [math.sqrt(initial_resid_norm_sq)]
+# A-inner product between search directions.
+# this is supposed to be zero at all times,
+# but may not be if the mesh isn't good enough
+a_inner_prods: list[float] = [0.0]
 
-for i in range(max_iterations):
-    print(f"Residual norm: {math.sqrt(resid_norm_sq)}")
+print("Computing exact controllability solution...")
 
+step_count = 0
+for i in range(args.max_iters):
     resid_update = compute_cost_gradient(search_dir, use_source_terms=False).gradient
     solution_update_param = resid_norm_sq / resid_update.dot(search_dir)
     approx_solution += search_dir.scaled(solution_update_param)
@@ -424,16 +465,61 @@ for i in range(max_iterations):
 
     next_resid_norm_sq = residual.dot(residual)
     resid_norm_proportion = next_resid_norm_sq / resid_norm_sq
+    resid_norm_sq = next_resid_norm_sq
     search_dir = residual + search_dir.scaled(resid_norm_proportion)
 
-    resid_norm_sq = next_resid_norm_sq
+    # measurements
+    control_energies.append(compute_control_energy(approx_solution))
+    resid_norms.append(math.sqrt(resid_norm_sq))
+    a_inner_prods.append(resid_update.dot(search_dir))
+    step_count += 1
+
     if (resid_norm_sq / initial_resid_norm_sq) < stop_condition_sq:
         print("Converged within step limit!")
         break
 
-energy = compute_cost_gradient(approx_solution).energy()
-print(f"Final energy: {energy}")
+print("Computing reference forward solution...")
+
+# compute energy of forward simulation over `max_iterations` time periods
+# to compare results to
+forward_energies: list[float] = []
+forward_state = initial_state.copy()
+for i in range(step_count + 1):
+    period_sim = ForwardSolve(forward_state.copy())
+    for _ in range(steps_per_period):
+        period_sim.step()
+    forward_energies.append((period_sim.state - forward_state).energy())
+    forward_state = period_sim.state
+
+#
+# draw results
+#
+
+fig = plt.figure()
+ax = fig.add_subplot(1, 1, 1)
+ax.set(xlabel="iteration count", ylabel="control energy")
+ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+x_axis = range(step_count + 1)
+(plot_ctl,) = ax.plot(x_axis, control_energies, label="control")
+(plot_fwd,) = ax.plot(x_axis, forward_energies, label="forward")
+ax.legend(handles=[plot_ctl, plot_fwd])
+plt.show()
+
+fig = plt.figure()
+ax = fig.add_subplot(1, 1, 1)
+ax.set(xlabel="iteration count", ylabel="residual norm")
+ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+ax.plot(x_axis, resid_norms)
+plt.show()
+
+fig = plt.figure()
+ax = fig.add_subplot(1, 1, 1)
+ax.set(xlabel="iteration count", ylabel="A-inner product of search directions")
+ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+ax.plot(x_axis, a_inner_prods)
+plt.show()
 
 approx_solution.draw()
 plt.show()
-approx_solution.save_anim(with_incident_wave=not args.no_inc_wave)
+if args.save_gif:
+    approx_solution.save_anim(with_incident_wave=not args.no_inc_wave)
