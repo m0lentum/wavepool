@@ -18,7 +18,9 @@ from typing import Iterable
 
 
 class AccuracyTest(Simulation):
-    def __init__(self, elem_size: float, timesteps_per_second: int):
+    def __init__(
+        self, elem_size: float, timesteps_per_second: int, use_harmonic_terms: bool
+    ):
         # mesh parameters
         mesh_dim = np.pi
         cmp_mesh = mesh.rect_unstructured(mesh_dim, mesh_dim, elem_size)
@@ -29,11 +31,14 @@ class AccuracyTest(Simulation):
         dt = 1.0 / timesteps_per_second
         step_count = math.ceil(sim_time / dt)
 
+        super().__init__(complex=cmp_complex, dt=dt, step_count=step_count)
+
         # incoming wave parameters
         inc_wavenumber = 2.0
         inc_wave_dir = np.array([0.0, 1.0])
         self.inc_wave_vector = inc_wavenumber * inc_wave_dir
-        self.inc_angular_vel = 2.0
+        self.wave_speed = 1.0
+        self.inc_angular_vel = inc_wavenumber * self.wave_speed
 
         # gather boundary elements
         bound_verts = []
@@ -47,10 +52,63 @@ class AccuracyTest(Simulation):
         self.bound_edges = set(bound_edges)
 
         # time stepping matrices
-        self.v_step_mat = dt * cmp_complex[2].star * cmp_complex[1].d
-        self.q_step_mat = dt * cmp_complex[1].star_inv * cmp_complex[1].d.T
+        if use_harmonic_terms:
+            self.build_harmonic_timestep()
+        else:
+            self.v_step_mat = (
+                dt * self.wave_speed**2 * cmp_complex[2].star * cmp_complex[1].d
+            )
+            self.q_step_mat = dt * cmp_complex[1].star_inv * cmp_complex[1].d.T
 
-        super().__init__(complex=cmp_complex, dt=dt, step_count=step_count)
+    def build_harmonic_timestep(self):
+        """Build Hodge operators and time-stepping matrices
+        optimized for harmonic waves."""
+
+        wavenumber_sq = (self.inc_angular_vel / self.wave_speed) ** 2
+        star_1_inv_diag = self.complex[1].star_inv.diagonal()
+        for edge_idx, (edge_len, dual_edge_len) in enumerate(
+            zip(self.complex[1].primal_volume, self.complex[1].dual_volume)
+        ):
+            edge_curv = edge_len**2 * wavenumber_sq
+            dual_curv = dual_edge_len**2 * wavenumber_sq
+            star_1_inv_diag[edge_idx] *= (1.0 - edge_curv / 12.0 - dual_curv / 12.0) / (
+                1.0 - dual_curv / 6.0
+            )
+
+        star_2_diag = self.complex[2].star.diagonal()
+        for face_idx, face in enumerate(self.complex[2].simplices):
+            center = self.complex[2].circumcenter[face_idx]
+            verts = [self.complex.vertices[i] for i in face]
+            vert_distances_sq = [np.dot(center - v, center - v) for v in verts]
+            edge_distances_sq = []
+            for i in range(len(verts)):
+                edge_vec = verts[i] - verts[i - 1]
+                edge_dir = edge_vec / np.linalg.norm(edge_vec)
+                edge_normal = np.array([-edge_dir[1], edge_dir[0]])
+                edge_dist = abs(np.dot(verts[i] - center, edge_normal))
+                edge_distances_sq.append(edge_dist**2)
+
+            face_curv = (wavenumber_sq / (3.0 * len(verts))) * (
+                2.0 * sum(edge_distances_sq) + sum(vert_distances_sq)
+            )
+            star_2_diag[face_idx] *= 1.0 / (
+                1.0 - face_curv / 8.0 + face_curv**2 / 192.0
+            )
+
+        star_1_inv = np.diag(star_1_inv_diag)
+        star_2 = np.diag(star_2_diag)
+
+        harmonic_dt = (2.0 / self.inc_angular_vel) * math.sin(
+            self.inc_angular_vel * self.dt / 2.0
+        )
+        self.v_step_mat = (
+            harmonic_dt * self.wave_speed**2 * star_2 * self.complex[1].d
+        )
+        # TODO: there's an error somewhere in star_1_inv, figure it out.
+        # star_2 seems to be correct
+        # since if we replace star_1_inv with self.complex[1].star_inv
+        # we get more accurate results than with Yee's Hodge as expected
+        self.q_step_mat = harmonic_dt * star_1_inv * self.complex[1].d.T
 
     def init_state(self):
         # time stored for incoming wave evaluation
@@ -68,10 +126,10 @@ class AccuracyTest(Simulation):
 
     def step(self):
         self.t += self.dt
-        self.v += self.v_step_mat * self.q
-        # w is computed at a time instance offset by half dt
+        self.v += self.v_step_mat @ self.q
+        # q is computed at a time instance offset by half dt
         t_at_q = self.t + 0.5 * self.dt
-        self.q += self.q_step_mat * self.v
+        self.q += self.q_step_mat @ self.v
         # plane wave at the boundary for q
         for bound_edge in self.bound_edges:
             edge_idx = self.complex[1].simplex_to_index.get(bound_edge)
@@ -129,25 +187,45 @@ class AccuracyTest(Simulation):
         return max_err
 
 
+# mesh_sizes = [np.pi / n for n in [5, 8]]
 mesh_sizes = [np.pi / n for n in [5, 8, 10, 20, 40]]
-sims = [AccuracyTest(elem_size=n, timesteps_per_second=60) for n in mesh_sizes]
-vis = anim.FluxAndPressure(sim=sims[2])
-vis.show()
+sims_yee = [
+    AccuracyTest(elem_size=n, timesteps_per_second=60, use_harmonic_terms=False)
+    for n in mesh_sizes
+]
+sims_harmonic = [
+    AccuracyTest(elem_size=n, timesteps_per_second=60, use_harmonic_terms=True)
+    for n in mesh_sizes
+]
+
+# vis = anim.FluxAndPressure(sim=sims_harmonic[1])
+# vis.show()
 # vis.save()
 
-v_errors = []
-q_errors = []
-for sim in sims:
+v_errors_yee = []
+q_errors_yee = []
+v_errors_harmonic = []
+q_errors_harmonic = []
+for sim in sims_harmonic:
     sim.run_to_end()
-    v_errors.append(sim.current_max_pressure_error())
-    q_errors.append(sim.current_max_flux_error())
+    v_errors_harmonic.append(sim.current_max_pressure_error())
+    q_errors_harmonic.append(sim.current_max_flux_error())
+for sim in sims_yee:
+    sim.run_to_end()
+    v_errors_yee.append(sim.current_max_pressure_error())
+    q_errors_yee.append(sim.current_max_flux_error())
 
 fig = plt.figure()
 v_ax = fig.add_subplot(2, 1, 1)
 v_ax.set(xlabel="mesh element size", ylabel="max error in pressure")
-v_ax.plot(mesh_sizes, v_errors)
+(plot_yee,) = v_ax.plot(mesh_sizes, v_errors_yee, label="Yee's Hodge")
+(plot_har,) = v_ax.plot(mesh_sizes, v_errors_harmonic, label="Harmonic Hodge")
+v_ax.legend(handles=[plot_yee, plot_har])
+
 w_ax = fig.add_subplot(2, 1, 2)
 w_ax.set(xlabel="mesh element size", ylabel="max error in velocity")
-w_ax.plot(mesh_sizes, q_errors)
+(plot_yee,) = w_ax.plot(mesh_sizes, q_errors_yee, label="Yee's Hodge")
+(plot_har,) = w_ax.plot(mesh_sizes, q_errors_harmonic, label="Harmonic Hodge")
+w_ax.legend(handles=[plot_yee, plot_har])
 plt.show()
 fig.savefig("errors.png")
