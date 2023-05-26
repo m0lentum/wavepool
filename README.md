@@ -1,5 +1,3 @@
-# Decathlon
-
 This repository contains research work for my master's thesis.
 I use Discrete Exterior Calculus (DEC)
 to simulate acoustic wave scattering in a two-dimensional setting
