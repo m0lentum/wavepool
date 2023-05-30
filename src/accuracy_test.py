@@ -34,11 +34,11 @@ class AccuracyTest(Simulation):
         super().__init__(complex=cmp_complex, dt=dt, step_count=step_count)
 
         # incoming wave parameters
-        inc_wavenumber = 2.0
+        self.inc_wavenumber = 2.0
         inc_wave_dir = np.array([0.0, 1.0])
-        self.inc_wave_vector = inc_wavenumber * inc_wave_dir
+        self.inc_wave_vector = self.inc_wavenumber * inc_wave_dir
         self.wave_speed = 1.0
-        self.inc_angular_vel = inc_wavenumber * self.wave_speed
+        self.inc_angular_vel = self.inc_wavenumber * self.wave_speed
 
         # gather boundary elements
         bound_verts = []
@@ -64,17 +64,16 @@ class AccuracyTest(Simulation):
         """Build Hodge operators and time-stepping matrices
         optimized for harmonic waves."""
 
-        wavenumber_sq = (self.inc_angular_vel / self.wave_speed) ** 2
+        wavenumber_sq = self.inc_wavenumber**2
         star_1_inv_diag = self.complex[1].star_inv.diagonal()
         for edge_idx, (edge_len, dual_edge_len) in enumerate(
             zip(self.complex[1].primal_volume, self.complex[1].dual_volume)
         ):
             edge_curv = edge_len**2 * wavenumber_sq
             dual_curv = dual_edge_len**2 * wavenumber_sq
-            star_1_inv_diag[edge_idx] *= (1.0 - edge_curv / 12.0 - dual_curv / 12.0) / (
-                1.0 - dual_curv / 6.0
+            star_1_inv_diag[edge_idx] /= (1.0 - dual_curv / 16.0) / (
+                1.0 - edge_curv / 94.0 - dual_curv / 32.0
             )
-
         star_2_diag = self.complex[2].star.diagonal()
         for face_idx, face in enumerate(self.complex[2].simplices):
             center = self.complex[2].circumcenter[face_idx]
@@ -91,9 +90,7 @@ class AccuracyTest(Simulation):
             face_curv = (wavenumber_sq / (3.0 * len(verts))) * (
                 2.0 * sum(edge_distances_sq) + sum(vert_distances_sq)
             )
-            star_2_diag[face_idx] *= 1.0 / (
-                1.0 - face_curv / 8.0 + face_curv**2 / 192.0
-            )
+            star_2_diag[face_idx] /= 1.0 - face_curv / 8.0
 
         star_1_inv = np.diag(star_1_inv_diag)
         star_2 = np.diag(star_2_diag)
@@ -104,10 +101,6 @@ class AccuracyTest(Simulation):
         self.v_step_mat = (
             harmonic_dt * self.wave_speed**2 * star_2 * self.complex[1].d
         )
-        # TODO: there's an error somewhere in star_1_inv, figure it out.
-        # star_2 seems to be correct
-        # since if we replace star_1_inv with self.complex[1].star_inv
-        # we get more accurate results than with Yee's Hodge as expected
         self.q_step_mat = harmonic_dt * star_1_inv * self.complex[1].d.T
 
     def init_state(self):
