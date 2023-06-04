@@ -13,6 +13,7 @@ import math
 import matplotlib.animation as plt_anim
 import matplotlib.pyplot as plt
 import pydec
+import scipy.sparse as sps
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
@@ -33,6 +34,13 @@ arg_parser.add_argument(
     type=int,
     default=8,
     help="number of points in the star, only effective if --shape star is also given",
+)
+arg_parser.add_argument(
+    "--mesh-scaling",
+    dest="mesh_scaling",
+    type=float,
+    default=1.0,
+    help="number to divide default mesh element size by",
 )
 arg_parser.add_argument(
     "--max-iters",
@@ -68,7 +76,9 @@ args = arg_parser.parse_args()
 
 if args.shape == "square":
     cmp_mesh = mesh.square_with_hole(
-        outer_extent=np.pi * 2.0, inner_extent=np.pi / 3.0, elem_size=np.pi / 6.0
+        outer_extent=np.pi * 2.0,
+        inner_extent=np.pi / 3.0,
+        elem_size=np.pi / (3.0 * args.mesh_scaling),
     )
 elif args.shape == "star":
     cmp_mesh = mesh.star(
@@ -76,15 +86,15 @@ elif args.shape == "star":
         inner_r=np.pi / 3.0,
         outer_r=np.pi,
         domain_r=np.pi * 2.0,
-        elem_size=np.pi / 6.0,
+        elem_size=np.pi / (3.0 * args.mesh_scaling),
     )
 elif args.shape == "diamonds":
     cmp_mesh = mesh.diamond_lattice(
         domain_radius=np.pi * 2.0,
         horizontal_divs=4,
         vertical_divs=2,
-        gap_size=np.pi / 6.0,
-        elem_size=np.pi / 6.0,
+        gap_size=np.pi / 3.0,
+        elem_size=np.pi / (3.0 * args.mesh_scaling),
     )
 else:
     # unreachable because argparse will throw an error,
@@ -124,11 +134,12 @@ for edge_idx in outer_bound_edges:
 
 # incoming wave parameters
 inc_wavenumber = 1.0
+wave_speed = 1.0
 inc_angle = args.inc_angle * 2.0 * np.pi / 360.0
 inc_wave_dir = np.array([math.cos(inc_angle), math.sin(inc_angle)])
 inc_wave_vector = inc_wavenumber * inc_wave_dir
 # angular velocity of the wave in radians per second
-inc_angular_vel = 2.0
+inc_angular_vel = inc_wavenumber * wave_speed
 
 # time parameters
 
@@ -140,8 +151,54 @@ dt = np.pi / 120.0
 steps_per_period = math.ceil(wave_period / dt)
 
 # time stepping matrices
-p_step_mat = dt * cmp_complex[2].star * cmp_complex[1].d
-q_step_mat = dt * cmp_complex[1].star_inv * cmp_complex[1].d.T
+
+p_step_mat_yee = dt * wave_speed**2 * cmp_complex[2].star * cmp_complex[1].d
+q_step_mat_yee = dt * cmp_complex[1].star_inv * cmp_complex[1].d.T
+
+# harmonic timestepping
+
+print("Computing harmonic timestep operators...")
+
+wavenumber_sq = inc_wavenumber**2
+star_1_inv_diag = cmp_complex[1].star_inv.diagonal()
+for edge_idx, (edge_len, dual_edge_len) in enumerate(
+    zip(cmp_complex[1].primal_volume, cmp_complex[1].dual_volume)
+):
+    edge_curv = edge_len**2 * wavenumber_sq
+    dual_curv = dual_edge_len**2 * wavenumber_sq
+    star_1_inv_diag[edge_idx] /= (1.0 - dual_curv / 16.0) / (
+        1.0 - edge_curv / 94.0 - dual_curv / 32.0
+    )
+star_2_diag = cmp_complex[2].star.diagonal()
+for face_idx, face in enumerate(cmp_complex[2].simplices):
+    center = cmp_complex[2].circumcenter[face_idx]
+    verts = [cmp_complex.vertices[i] for i in face]
+    vert_distances_sq = [np.dot(center - v, center - v) for v in verts]
+    edge_distances_sq = []
+    for i in range(len(verts)):
+        edge_vec = verts[i] - verts[i - 1]
+        edge_dir = edge_vec / np.linalg.norm(edge_vec)
+        edge_normal = np.array([-edge_dir[1], edge_dir[0]])
+        edge_dist = abs(np.dot(verts[i] - center, edge_normal))
+        edge_distances_sq.append(edge_dist**2)
+
+    face_curv = (wavenumber_sq / (3.0 * len(verts))) * (
+        2.0 * sum(edge_distances_sq) + sum(vert_distances_sq)
+    )
+    star_2_diag[face_idx] /= 1.0 - face_curv / 8.0
+
+star_1_inv = sps.diags(star_1_inv_diag)
+star_2 = sps.diags(star_2_diag)
+
+harmonic_dt = (2.0 / inc_angular_vel) * math.sin(inc_angular_vel * dt / 2.0)
+p_step_mat_har = harmonic_dt * wave_speed**2 * star_2 * cmp_complex[1].d
+q_step_mat_har = harmonic_dt * star_1_inv * cmp_complex[1].d.T
+
+# using global state to set which timestep matrices are active.
+# TODO: this is super ugly, this (and the rest of the global variables)
+# should be encapsulated and parameterized better
+p_step_mat = p_step_mat_har
+q_step_mat = q_step_mat_har
 
 
 # utilities for computing the incoming wave
@@ -307,10 +364,10 @@ class ForwardSolve:
         """Solve one timestep in the forward equation."""
 
         self.t += dt
-        self.state.pressure += p_step_mat * self.state.flux
+        self.state.pressure += p_step_mat @ self.state.flux
         # q is computed at a time instance offset by half dt
         t_at_w = self.t + 0.5 * dt
-        self.state.flux += q_step_mat * self.state.pressure
+        self.state.flux += q_step_mat @ self.state.pressure
         # incoming wave on the scatterer's surface
         for edge_idx in inner_bound_edges:
             self.state.flux[edge_idx] = source_term_scaling(
@@ -333,7 +390,7 @@ class BackwardSolve:
     def step(self):
         """Solve one timestep in the backward equation."""
 
-        self.state.flux += p_step_mat.T * self.state.pressure
+        self.state.flux += p_step_mat.T @ self.state.pressure
         # inner Dirichlet boundary without source term
         for edge_idx in inner_bound_edges:
             self.state.flux[edge_idx] = 0.0
@@ -346,7 +403,7 @@ class BackwardSolve:
                 * edge_info.orientation
             )
 
-        self.state.pressure += q_step_mat.T * self.state.flux
+        self.state.pressure += q_step_mat.T @ self.state.flux
 
 
 @dataclass
@@ -384,7 +441,7 @@ def compute_cost_gradient(
     bwd_init_q = -fwd_diff.flux
     bwd_init_state = State(
         flux=bwd_init_q,
-        pressure=(q_step_mat.T * bwd_init_q) - fwd_diff.pressure,
+        pressure=(q_step_mat.T @ bwd_init_q) - fwd_diff.pressure,
     )
 
     # solve the backward equation
@@ -393,7 +450,7 @@ def compute_cost_gradient(
         sim_bwd.step()
     final_bwd_state = State(
         pressure=-sim_bwd.state.pressure,
-        flux=-sim_bwd.state.flux - p_step_mat.T * sim_bwd.state.pressure,
+        flux=-sim_bwd.state.flux - p_step_mat.T @ sim_bwd.state.pressure,
     )
 
     return GradientResult(
@@ -416,80 +473,112 @@ def compute_control_energy(state: State) -> float:
 #
 
 
-zero_state = State(
-    pressure=np.zeros(cmp_complex[2].num_simplices),
-    flux=np.zeros(cmp_complex[1].num_simplices),
-)
+@dataclass
+class SolveResults:
+    """Result of a simulation, plus some measurements taken in the process."""
 
-# ease in the source terms to obtain smooth initial values for optimization
+    # resulting time-harmonic (if correct) state
+    state: State
+    # number of iterations it took to reach the controllability solution
+    step_count: int
+    # energy of the exact controllability solution over time
+    control_energies: list[float]
+    # energy of the forward solution over time
+    forward_energies: list[float]
+    # residual norm
+    resid_norms: list[float]
+    # A-inner product between search directions.
+    # this is supposed to be zero at all times,
+    # but may not be if the mesh isn't good enough
+    a_inner_prods: list[float]
 
-transition_time = 5 * wave_period
-transition_step_count = math.ceil(transition_time / dt)
-transition_sim = ForwardSolve(state=zero_state.copy())
+
+def solve():
+    zero_state = State(
+        pressure=np.zeros(cmp_complex[2].num_simplices),
+        flux=np.zeros(cmp_complex[1].num_simplices),
+    )
+
+    # ease in the source terms to obtain smooth initial values for optimization
+
+    transition_time = 5 * wave_period
+    transition_step_count = math.ceil(transition_time / dt)
+    transition_sim = ForwardSolve(state=zero_state.copy())
+
+    def easing(t: float) -> float:
+        sin_val = math.sin((t / transition_time) * (np.pi / 2.0))
+        return (2.0 - sin_val) * sin_val
+
+    for _ in range(transition_step_count):
+        transition_sim.step(source_term_scaling=easing)
+
+    initial_state = transition_sim.state
+
+    # begin conjugate gradient optimization
+
+    state = initial_state.copy()
+    stop_condition_sq = (1e-2) ** 2
+    residual = -compute_cost_gradient(state, use_source_terms=True).gradient
+    initial_resid_norm_sq = residual.dot(residual)
+    resid_norm_sq = initial_resid_norm_sq
+    search_dir = residual.copy()
+
+    results = SolveResults(
+        state=state,
+        step_count=0,
+        control_energies=[compute_control_energy(state)],
+        forward_energies=[],
+        resid_norms=[math.sqrt(initial_resid_norm_sq)],
+        a_inner_prods=[0.0],
+    )
+
+    print("Computing exact controllability solution...")
+
+    for i in range(args.max_iters):
+        resid_update = compute_cost_gradient(
+            search_dir, use_source_terms=False
+        ).gradient
+        solution_update_param = resid_norm_sq / resid_update.dot(search_dir)
+        results.state += search_dir.scaled(solution_update_param)
+        residual -= resid_update.scaled(solution_update_param)
+
+        next_resid_norm_sq = residual.dot(residual)
+        resid_norm_proportion = next_resid_norm_sq / resid_norm_sq
+        resid_norm_sq = next_resid_norm_sq
+        search_dir = residual + search_dir.scaled(resid_norm_proportion)
+
+        # measurements
+        results.control_energies.append(compute_control_energy(results.state))
+        results.resid_norms.append(math.sqrt(resid_norm_sq))
+        results.a_inner_prods.append(resid_update.dot(search_dir))
+        results.step_count += 1
+
+        if (resid_norm_sq / initial_resid_norm_sq) < stop_condition_sq:
+            print("Converged within step limit!")
+            break
+
+    print("Computing reference forward solution...")
+
+    # compute energy of forward simulation over `max_iterations` time periods
+    # to compare results to
+    forward_state = initial_state.copy()
+    for i in range(results.step_count + 1):
+        period_sim = ForwardSolve(forward_state.copy())
+        for _ in range(steps_per_period):
+            period_sim.step()
+        results.forward_energies.append((period_sim.state - forward_state).energy())
+        forward_state = period_sim.state
+
+    return results
 
 
-def easing(t: float) -> float:
-    sin_val = math.sin((t / transition_time) * (np.pi / 2.0))
-    return (2.0 - sin_val) * sin_val
+results_harmonic = solve()
 
+print("Switching to Yee timestep operators...")
+p_step_mat = p_step_mat_yee
+q_step_mat = q_step_mat_yee
+results_yee = solve()
 
-for _ in range(transition_step_count):
-    transition_sim.step(source_term_scaling=easing)
-
-initial_state = transition_sim.state
-
-# begin conjugate gradient optimization
-
-stop_condition_sq = (1e-2) ** 2
-approx_solution = initial_state.copy()
-residual = -compute_cost_gradient(approx_solution, use_source_terms=True).gradient
-initial_resid_norm_sq = residual.dot(residual)
-resid_norm_sq = initial_resid_norm_sq
-search_dir = residual.copy()
-# measurements
-control_energies: list[float] = [compute_control_energy(approx_solution)]
-resid_norms: list[float] = [math.sqrt(initial_resid_norm_sq)]
-# A-inner product between search directions.
-# this is supposed to be zero at all times,
-# but may not be if the mesh isn't good enough
-a_inner_prods: list[float] = [0.0]
-
-print("Computing exact controllability solution...")
-
-step_count = 0
-for i in range(args.max_iters):
-    resid_update = compute_cost_gradient(search_dir, use_source_terms=False).gradient
-    solution_update_param = resid_norm_sq / resid_update.dot(search_dir)
-    approx_solution += search_dir.scaled(solution_update_param)
-    residual -= resid_update.scaled(solution_update_param)
-
-    next_resid_norm_sq = residual.dot(residual)
-    resid_norm_proportion = next_resid_norm_sq / resid_norm_sq
-    resid_norm_sq = next_resid_norm_sq
-    search_dir = residual + search_dir.scaled(resid_norm_proportion)
-
-    # measurements
-    control_energies.append(compute_control_energy(approx_solution))
-    resid_norms.append(math.sqrt(resid_norm_sq))
-    a_inner_prods.append(resid_update.dot(search_dir))
-    step_count += 1
-
-    if (resid_norm_sq / initial_resid_norm_sq) < stop_condition_sq:
-        print("Converged within step limit!")
-        break
-
-print("Computing reference forward solution...")
-
-# compute energy of forward simulation over `max_iterations` time periods
-# to compare results to
-forward_energies: list[float] = []
-forward_state = initial_state.copy()
-for i in range(step_count + 1):
-    period_sim = ForwardSolve(forward_state.copy())
-    for _ in range(steps_per_period):
-        period_sim.step()
-    forward_energies.append((period_sim.state - forward_state).energy())
-    forward_state = period_sim.state
 
 #
 # draw results
@@ -499,27 +588,58 @@ fig = plt.figure()
 ax = fig.add_subplot(1, 1, 1)
 ax.set(xlabel="iteration count", ylabel="control energy")
 ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
-x_axis = range(step_count + 1)
-(plot_ctl,) = ax.plot(x_axis, control_energies, label="control")
-(plot_fwd,) = ax.plot(x_axis, forward_energies, label="forward")
-ax.legend(handles=[plot_ctl, plot_fwd])
+x_axis_har = range(results_harmonic.step_count + 1)
+x_axis_yee = range(results_yee.step_count + 1)
+(plot_ctl_har,) = ax.plot(
+    x_axis_har, results_harmonic.control_energies, label="control (harmonic)"
+)
+(plot_fwd_har,) = ax.plot(
+    x_axis_har, results_harmonic.forward_energies, label="forward (harmonic)"
+)
+(plot_ctl_yee,) = ax.plot(
+    x_axis_yee, results_yee.control_energies, label="control (Yee)"
+)
+(plot_fwd_yee,) = ax.plot(
+    x_axis_yee, results_yee.forward_energies, label="forward (Yee)"
+)
+ax.legend(handles=[plot_ctl_har, plot_fwd_har, plot_ctl_yee, plot_fwd_yee])
+plt.show()
+
+fig = plt.figure()
+ax = fig.add_subplot(1, 1, 1)
+ax.set(xlabel="energy difference between harmonic and Yee")
+ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+# padding possibly required to match dimension of the vectors,
+# since the number of steps to convergence may differ
+max_step_count = max(results_harmonic.step_count, results_yee.step_count)
+if results_harmonic.step_count < max_step_count:
+    results_harmonic.control_energies += [0.0] * (
+        max_step_count - results_harmonic.step_count
+    )
+if results_yee.step_count < max_step_count:
+    results_yee.control_energies += [0.0] * (max_step_count - results_yee.step_count)
+ax.plot(
+    range(max_step_count + 1),
+    np.array(results_yee.control_energies)
+    - np.array(results_harmonic.control_energies),
+)
 plt.show()
 
 fig = plt.figure()
 ax = fig.add_subplot(1, 1, 1)
 ax.set(xlabel="iteration count", ylabel="residual norm")
 ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
-ax.plot(x_axis, resid_norms)
+ax.plot(x_axis_har, results_harmonic.resid_norms)
 plt.show()
 
 fig = plt.figure()
 ax = fig.add_subplot(1, 1, 1)
 ax.set(xlabel="iteration count", ylabel="A-inner product of search directions")
 ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
-ax.plot(x_axis, a_inner_prods)
+ax.plot(x_axis_har, results_harmonic.a_inner_prods)
 plt.show()
 
-approx_solution.draw()
+results_harmonic.state.draw()
 plt.show()
 if args.save_gif:
-    approx_solution.save_anim(with_incident_wave=not args.no_inc_wave)
+    results_harmonic.state.save_anim(with_incident_wave=not args.no_inc_wave)
