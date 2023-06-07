@@ -252,6 +252,10 @@ class State:
         between a wave period's beginning state and end state."""
         return 0.5 * self.dot(self)
 
+    def norm(self) -> float:
+        """Euclidean norm of the entire state vector."""
+        return math.sqrt(self.dot(self))
+
     def __add__(self, other):
         return State(
             pressure=self.pressure + other.pressure, flux=self.flux + other.flux
@@ -581,8 +585,23 @@ results_yee = solve()
 
 
 #
-# draw results
+# print and plot results
 #
+
+print("")
+har_norm = results_harmonic.state.norm()
+yee_har_diff = (results_yee.state - results_harmonic.state).norm()
+print(f"Magnitude of harmonic solution: {har_norm}")
+print(f"Difference between Yee and harmonic solution: {yee_har_diff}")
+print(f"Relative difference: {yee_har_diff / har_norm:.2%}")
+
+p_step_mat = p_step_mat_har
+q_step_mat = q_step_mat_har
+yee_energy_har = compute_control_energy(results_yee.state)
+print(f"Yee solution's final energy: {results_yee.control_energies[-1]}")
+print(f"Harmonic solution's final energy: {results_harmonic.control_energies[-1]}")
+print(f"Yee solution's energy computed with harmonic timestepping: {yee_energy_har}")
+
 
 fig = plt.figure()
 ax = fig.add_subplot(1, 1, 1)
