@@ -33,7 +33,7 @@ class AccuracyTest(Simulation):
 
         super().__init__(complex=cmp_complex, dt=dt, step_count=step_count)
 
-        # incoming wave parameters
+        # incident wave parameters
         self.inc_wavenumber = 2.0
         inc_wave_dir = np.array([0.0, 1.0])
         self.inc_wave_vector = self.inc_wavenumber * inc_wave_dir
@@ -104,7 +104,7 @@ class AccuracyTest(Simulation):
         self.q_step_mat = harmonic_dt * star_1_inv * self.complex[1].d.T
 
     def init_state(self):
-        # time stored for incoming wave evaluation
+        # time stored for incident wave evaluation
         self.t = 0.0
 
         self.v = np.zeros(self.complex[2].num_simplices)
@@ -129,14 +129,14 @@ class AccuracyTest(Simulation):
             self.q[edge_idx] = self._eval_inc_wave_flux(t_at_q, bound_edge)
 
     def _eval_inc_wave_pressure(self, t, position: npt.NDArray) -> float:
-        """Evaluate the value of v for the incoming plane wave at a point."""
+        """Evaluate the value of v for the incident plane wave at a point."""
 
         return self.inc_angular_vel * math.sin(
             self.inc_angular_vel * t - np.dot(self.inc_wave_vector, position)
         )
 
     def _eval_inc_wave_flux(self, t: float, edge_vert_indices: Iterable[int]) -> float:
-        """Evaluate the line integral of the area flux of the incoming wave
+        """Evaluate the line integral of the area flux of the incident wave
         over an edge of the mesh, in other words compute a value of `q` from the wave."""
 
         p = [self.complex.vertices[v] for v in edge_vert_indices]

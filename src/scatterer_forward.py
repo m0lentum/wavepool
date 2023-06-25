@@ -4,7 +4,7 @@ Circular scatterer object centered at origin,
 circular computational domain around it with
 absorbing boundary condition at the outer edge
 modeling empty space.
-Incoming plane wave -cos(ωt - 𝜿·x).
+Incident plane wave -cos(ωt - 𝜿·x).
 """
 
 from utils import mesh
@@ -53,7 +53,7 @@ for edge_idx in outer_bound_edges:
 
 class CircleScatterer(Simulation):
     def __init__(self):
-        # incoming wave parameters
+        # incident wave parameters
         inc_wavenumber = 1.0
         inc_wave_dir = np.array([0.0, 1.0])
         self.inc_wave_vector = inc_wavenumber * inc_wave_dir
@@ -71,7 +71,7 @@ class CircleScatterer(Simulation):
         super().__init__(complex=cmp_complex, dt=dt, step_count=step_count)
 
     def init_state(self):
-        # time needed for incoming wave evaluation
+        # time needed for incident wave evaluation
         self.t = 0.0
 
         self.v = np.zeros(cmp_complex[2].num_simplices)
@@ -90,7 +90,7 @@ class CircleScatterer(Simulation):
         # q is computed at a time instance offset by half dt
         t_at_w = self.t + 0.5 * self.dt
         self.q += self.q_step_mat * self.v
-        # incoming wave on the scatterer's surface
+        # incident wave on the scatterer's surface
         for edge_idx in inner_bound_edges:
             self.q[edge_idx] = self._eval_inc_wave_flux(
                 t_at_w,
@@ -105,14 +105,14 @@ class CircleScatterer(Simulation):
             )
 
     def _eval_inc_wave_pressure(self, t: float, position: npt.NDArray) -> float:
-        """Evaluate the value of v for the incoming plane wave at a point."""
+        """Evaluate the value of v for the incident plane wave at a point."""
 
         return self.inc_angular_vel * math.sin(
             self.inc_angular_vel * t - np.dot(self.inc_wave_vector, position)
         )
 
     def _eval_inc_wave_flux(self, t: float, edge_vert_indices: Iterable[int]) -> float:
-        """Evaluate the line integral of the area flux of the incoming wave
+        """Evaluate the line integral of the area flux of the incident wave
         over an edge of the mesh, in other words compute a value of `q` from the wave."""
 
         p = [self.complex.vertices[v] for v in edge_vert_indices]

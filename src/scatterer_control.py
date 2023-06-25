@@ -54,13 +54,13 @@ arg_parser.add_argument(
     dest="inc_angle",
     type=float,
     default=90.0,
-    help="angle of the incoming wave's propagating direction in degrees",
+    help="angle of the incident wave's propagating direction in degrees",
 )
 arg_parser.add_argument(
     "--no-inc-wave",
     dest="no_inc_wave",
     action="store_true",
-    help="hide the incoming wave in the animated visualization",
+    help="hide the incident wave in the animated visualization",
 )
 arg_parser.add_argument(
     "--save-gif",
@@ -132,7 +132,7 @@ for edge_idx in outer_bound_edges:
 # simulation parameters and helpers
 #
 
-# incoming wave parameters
+# incident wave parameters
 inc_wavenumber = 1.0
 wave_speed = 1.0
 inc_angle = args.inc_angle * 2.0 * np.pi / 360.0
@@ -145,7 +145,7 @@ inc_angular_vel = inc_wavenumber * wave_speed
 
 # since we're looking for a time-periodic solution,
 # it's important the simulated time range
-# coincides with the period the incoming wave
+# coincides with the period the incident wave
 wave_period = (2.0 * np.pi) / inc_angular_vel
 dt = np.pi / 120.0
 steps_per_period = math.ceil(wave_period / dt)
@@ -201,9 +201,9 @@ p_step_mat = p_step_mat_har
 q_step_mat = q_step_mat_har
 
 
-# utilities for computing the incoming wave
+# utilities for computing the incident wave
 def eval_inc_wave_pressure(t, position: npt.NDArray) -> float:
-    """Evaluate the value of v for the incoming plane wave at a point."""
+    """Evaluate the value of v for the incident plane wave at a point."""
 
     return inc_angular_vel * math.sin(
         inc_angular_vel * t - np.dot(inc_wave_vector, position)
@@ -211,7 +211,7 @@ def eval_inc_wave_pressure(t, position: npt.NDArray) -> float:
 
 
 def eval_inc_wave_flux(t: float, edge_vert_indices: Iterable[int]) -> float:
-    """Evaluate the line integral of the area flux of the incoming wave
+    """Evaluate the line integral of the area flux of the incident wave
     over an edge of the mesh, in other words compute a value of `q` from the wave."""
 
     p = [cmp_complex.vertices[v] for v in edge_vert_indices]
@@ -306,7 +306,7 @@ class State:
         with_incident_wave: bool = True,
     ):
         """Save a nice-looking visualization of the solution
-        with the incoming wave added and velocity arrows removed.
+        with the incident wave added and velocity arrows removed.
         Good for social media posting!"""
 
         sim_fwd = ForwardSolve(state=self.copy())
@@ -337,8 +337,8 @@ class State:
 
 
 def eval_inc_wave_everywhere(t: float) -> State:
-    """Evaluate the incoming plane wave on every feature of the mesh.
-    Used to add the incoming wave to the final visualization."""
+    """Evaluate the incident plane wave on every feature of the mesh.
+    Used to add the incident wave to the final visualization."""
 
     state = State()
     for vert_idx in range(len(state.pressure)):
@@ -372,7 +372,7 @@ class ForwardSolve:
         # q is computed at a time instance offset by half dt
         t_at_w = self.t + 0.5 * dt
         self.state.flux += q_step_mat @ self.state.pressure
-        # incoming wave on the scatterer's surface
+        # incident wave on the scatterer's surface
         for edge_idx in inner_bound_edges:
             self.state.flux[edge_idx] = source_term_scaling(
                 t_at_w
