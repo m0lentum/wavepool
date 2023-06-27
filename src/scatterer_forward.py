@@ -7,8 +7,9 @@ modeling empty space.
 Incident plane wave -cos(ωt - 𝜿·x).
 """
 
-from utils import mesh
 from utils import animate as anim
+from utils import mesh
+from utils import measure_mesh
 from utils.sim_runner import Simulation
 
 import numpy as np
@@ -23,6 +24,7 @@ scatterer_radius = 1.0
 outer_edge_radius = 3.0
 cmp_mesh = mesh.annulus(scatterer_radius, outer_edge_radius, refine_count=1)
 cmp_complex = cmp_mesh.complex
+measure_mesh.print_measurements(cmp_complex)
 inner_bound_edges: list[int] = cmp_mesh.edge_groups["inner boundary"]
 outer_bound_edges: list[int] = cmp_mesh.edge_groups["outer boundary"]
 
@@ -168,4 +170,4 @@ vis = anim.FluxAndPressure(
     get_flux=lambda s: s.get_flux_with_inc_wave(),
 )
 vis.show()
-vis.save()
+# vis.save()

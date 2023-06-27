@@ -5,6 +5,7 @@ to find a time-harmonic solution.
 """
 
 from utils import mesh
+from utils import measure_mesh
 
 import argparse
 import numpy as np
@@ -24,7 +25,7 @@ from typing import Callable, Iterable
 arg_parser = argparse.ArgumentParser(prog="scatterer_control")
 arg_parser.add_argument(
     "--shape",
-    choices=["square", "star", "diamonds"],
+    choices=["square", "star", "diamonds", "diamonds_bad"],
     default="square",
     help="shape of the scatterer object",
 )
@@ -55,6 +56,13 @@ arg_parser.add_argument(
     type=float,
     default=90.0,
     help="angle of the incident wave's propagating direction in degrees",
+)
+arg_parser.add_argument(
+    "--wavenumber",
+    dest="wavenumber",
+    type=float,
+    default=1.0,
+    help="wavenumber (inverse of wavelength) of the incident wave",
 )
 arg_parser.add_argument(
     "--no-inc-wave",
@@ -88,12 +96,14 @@ elif args.shape == "star":
         domain_r=np.pi * 2.0,
         elem_size=np.pi / (3.0 * args.mesh_scaling),
     )
-elif args.shape == "diamonds":
+elif args.shape == "diamonds" or args.shape == "diamonds_bad":
     cmp_mesh = mesh.diamond_lattice(
         domain_radius=np.pi * 2.0,
         horizontal_divs=4,
         vertical_divs=2,
-        gap_size=np.pi / 3.0,
+        # diamonds_bad has gap size smaller than element size,
+        # making narrow triangles that cause instability
+        gap_size=np.pi / 3.0 if args.shape != "diamonds_bad" else np.pi / 6.0,
         elem_size=np.pi / (3.0 * args.mesh_scaling),
     )
 else:
@@ -104,6 +114,8 @@ cmp_complex = cmp_mesh.complex
 inner_bound_edges: list[int] = cmp_mesh.edge_groups["inner boundary"]
 outer_bound_edges: list[int] = cmp_mesh.edge_groups["outer boundary"]
 
+measure_mesh.print_measurements(cmp_complex)
+print("")
 
 # for each outer boundary edge, find the triangle this edge is part of
 # and save some info for computing the absorbing boundary condition
@@ -133,7 +145,7 @@ for edge_idx in outer_bound_edges:
 #
 
 # incident wave parameters
-inc_wavenumber = 1.0
+inc_wavenumber = args.wavenumber
 wave_speed = 1.0
 inc_angle = args.inc_angle * 2.0 * np.pi / 360.0
 inc_wave_dir = np.array([math.cos(inc_angle), math.sin(inc_angle)])
@@ -353,6 +365,10 @@ def eval_inc_wave_everywhere(t: float) -> State:
         )
     return state
 
+
+# State().draw()
+# plt.show()
+# exit()
 
 #
 # simulation solver
