@@ -15,7 +15,6 @@ from utils.sim_runner import Simulation
 import numpy as np
 import numpy.typing as npt
 import math
-import matplotlib.pyplot as plt
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -48,7 +47,7 @@ for edge_idx in outer_bound_edges:
         BoundaryEdgeInfo(
             dual_vert_idx=tri_indices[0],
             orientation=cmp_complex[1].d[tri_indices[0], edge_idx],
-            length=np.linalg.norm(edge_ends[1] - edge_ends[0]),
+            length=float(np.linalg.norm(edge_ends[1] - edge_ends[0])),
         )
     )
 
@@ -115,7 +114,8 @@ class CircleScatterer(Simulation):
 
     def _eval_inc_wave_flux(self, t: float, edge_vert_indices: Iterable[int]) -> float:
         """Evaluate the line integral of the area flux of the incident wave
-        over an edge of the mesh, in other words compute a value of `q` from the wave."""
+        over an edge of the mesh, in other words compute a value of `q` from the wave.
+        """
 
         p = [self.complex.vertices[v] for v in edge_vert_indices]
         kdotp = np.dot(self.inc_wave_vector, p[0])

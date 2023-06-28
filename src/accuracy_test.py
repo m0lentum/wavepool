@@ -1,13 +1,5 @@
-"""
-Wave equation (see membrane.py doc comment).
-Square domain with known plane wave solution
-imposed on the edge as Dirichlet boundary condition.
-Examining error compared to known solution as the
-mesh is refined and timestep shortened.
-"""
-
-from utils import mesh
 from utils import animate as anim
+from utils import mesh
 from utils.sim_runner import Simulation
 
 import numpy as np
@@ -137,7 +129,8 @@ class AccuracyTest(Simulation):
 
     def _eval_inc_wave_flux(self, t: float, edge_vert_indices: Iterable[int]) -> float:
         """Evaluate the line integral of the area flux of the incident wave
-        over an edge of the mesh, in other words compute a value of `q` from the wave."""
+        over an edge of the mesh, in other words compute a value of `q` from the wave.
+        """
 
         p = [self.complex.vertices[v] for v in edge_vert_indices]
         kdotp = np.dot(self.inc_wave_vector, p[0])
@@ -180,7 +173,6 @@ class AccuracyTest(Simulation):
         return max_err
 
 
-# mesh_sizes = [np.pi / n for n in [5, 8]]
 mesh_sizes = [np.pi / n for n in [5, 8, 10, 20, 40]]
 sims_yee = [
     AccuracyTest(elem_size=n, timesteps_per_second=60, use_harmonic_terms=False)
@@ -191,9 +183,8 @@ sims_harmonic = [
     for n in mesh_sizes
 ]
 
-# vis = anim.FluxAndPressure(sim=sims_harmonic[1])
-# vis.show()
-# vis.save()
+vis = anim.FluxAndPressure(sim=sims_harmonic[1])
+vis.show()
 
 v_errors_yee = []
 q_errors_yee = []

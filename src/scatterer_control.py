@@ -117,6 +117,7 @@ outer_bound_edges: list[int] = cmp_mesh.edge_groups["outer boundary"]
 measure_mesh.print_measurements(cmp_complex)
 print("")
 
+
 # for each outer boundary edge, find the triangle this edge is part of
 # and save some info for computing the absorbing boundary condition
 @dataclass
@@ -136,7 +137,7 @@ for edge_idx in outer_bound_edges:
         BoundaryEdgeInfo(
             dual_vert_idx=tri_indices[0],
             orientation=cmp_complex[1].d[tri_indices[0], edge_idx],
-            length=np.linalg.norm(edge_ends[1] - edge_ends[0]),
+            length=float(np.linalg.norm(edge_ends[1] - edge_ends[0])),
         )
     )
 
@@ -554,7 +555,7 @@ def solve():
 
     print("Computing exact controllability solution...")
 
-    for i in range(args.max_iters):
+    for _ in range(args.max_iters):
         resid_update = compute_cost_gradient(
             search_dir, use_source_terms=False
         ).gradient
@@ -582,7 +583,7 @@ def solve():
     # compute energy of forward simulation over `max_iterations` time periods
     # to compare results to
     forward_state = initial_state.copy()
-    for i in range(results.step_count + 1):
+    for _ in range(results.step_count + 1):
         period_sim = ForwardSolve(forward_state.copy())
         for _ in range(steps_per_period):
             period_sim.step()

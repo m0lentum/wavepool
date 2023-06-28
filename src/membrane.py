@@ -1,16 +1,3 @@
-"""
-Vibrating rectangular membrane simulated with leapfrog time discretization
-and Dirichlet boundary condition ɸ = 0.
-
-Wave equation ∂²ɸ/∂t² - c²∇²ɸ = f (where ɸ is velocity potential)
-represented as a first-order system of differential form equations
-with acoustic pressure v = ∂ɸ/∂t represented by a 0-form on the primal mesh
-and particle velocity w = ∇ɸ represented by a 1-form on the primal mesh.
-The boundary condition ɸ = 0 implies v = 0, but w can vary on the boundary.
-
-(TODO: add a .md note to explain in more detail)
-"""
-
 from utils import mesh
 from utils import animate as anim
 from utils.sim_runner import Simulation
