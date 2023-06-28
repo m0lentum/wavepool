@@ -1,12 +1,3 @@
-"""
-Wave equation (see membrane.py doc comment).
-Circular scatterer object centered at origin,
-circular computational domain around it with
-absorbing boundary condition at the outer edge
-modeling empty space.
-Incident plane wave -cos(ωt - 𝜿·x).
-"""
-
 from utils import animate as anim
 from utils import mesh
 from utils import measure_mesh

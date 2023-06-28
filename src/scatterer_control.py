@@ -1,9 +1,3 @@
-"""
-Same problem as scatterer_forward.py,
-but using the exact controllability method
-to find a time-harmonic solution.
-"""
-
 from utils import mesh
 from utils import measure_mesh
 
