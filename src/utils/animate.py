@@ -104,7 +104,7 @@ class FluxAndPressure(Animator):
     def __init__(
         self,
         sim: Simulation,
-        get_pressure: Callable[[Any], npt.NDArray[np.float64]] = lambda s: s.v,
+        get_pressure: Callable[[Any], npt.NDArray[np.float64]] = lambda s: s.p,
         get_flux: Callable[[Any], npt.NDArray[np.float64]] = lambda s: s.q,
         vmin: float = -2,
         vmax: float = 2,

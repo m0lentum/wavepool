@@ -47,7 +47,7 @@ class AccuracyTest(Simulation):
         if use_harmonic_terms:
             self.build_harmonic_timestep()
         else:
-            self.v_step_mat = (
+            self.p_step_mat = (
                 dt * self.wave_speed**2 * cmp_complex[2].star * cmp_complex[1].d
             )
             self.q_step_mat = dt * cmp_complex[1].star_inv * cmp_complex[1].d.T
@@ -90,7 +90,7 @@ class AccuracyTest(Simulation):
         harmonic_dt = (2.0 / self.inc_angular_vel) * math.sin(
             self.inc_angular_vel * self.dt / 2.0
         )
-        self.v_step_mat = (
+        self.p_step_mat = (
             harmonic_dt * self.wave_speed**2 * star_2 * self.complex[1].d
         )
         self.q_step_mat = harmonic_dt * star_1_inv * self.complex[1].d.T
@@ -99,9 +99,9 @@ class AccuracyTest(Simulation):
         # time stored for incident wave evaluation
         self.t = 0.0
 
-        self.v = np.zeros(self.complex[2].num_simplices)
-        for vert_idx in range(len(self.v)):
-            self.v[vert_idx] = self._eval_inc_wave_pressure(
+        self.p = np.zeros(self.complex[2].num_simplices)
+        for vert_idx in range(len(self.p)):
+            self.p[vert_idx] = self._eval_inc_wave_pressure(
                 0.0, self.complex[2].circumcenter[vert_idx]
             )
         self.q = np.zeros(self.complex[1].num_simplices)
@@ -111,24 +111,24 @@ class AccuracyTest(Simulation):
 
     def step(self):
         self.t += self.dt
-        self.v += self.v_step_mat @ self.q
+        self.p += self.p_step_mat @ self.q
         # q is computed at a time instance offset by half dt
         t_at_q = self.t + 0.5 * self.dt
-        self.q += self.q_step_mat @ self.v
+        self.q += self.q_step_mat @ self.p
         # plane wave at the boundary for q
         for bound_edge in self.bound_edges:
             edge_idx = self.complex[1].simplex_to_index.get(bound_edge)
             self.q[edge_idx] = self._eval_inc_wave_flux(t_at_q, bound_edge)
 
     def _eval_inc_wave_pressure(self, t, position: npt.NDArray) -> float:
-        """Evaluate the value of v for the incident plane wave at a point."""
+        """Evaluate the value of p for the incident plane wave at a point."""
 
         return self.inc_angular_vel * math.sin(
             self.inc_angular_vel * t - np.dot(self.inc_wave_vector, position)
         )
 
     def _eval_inc_wave_flux(self, t: float, edge_vert_indices: Iterable[int]) -> float:
-        """Evaluate the line integral of the area flux of the incident wave
+        """Evaluate the line integral of the flux of the incident wave
         over an edge of the mesh, in other words compute a value of `q` from the wave.
         """
 
@@ -151,9 +151,9 @@ class AccuracyTest(Simulation):
         in the current state of the simulation."""
 
         max_err = 0.0
-        for vert, v_val in zip(self.complex[2].circumcenter, self.v):
+        for vert, p_val in zip(self.complex[2].circumcenter, self.p):
             exact_pressure = self._eval_inc_wave_pressure(self.t, vert)
-            err = abs(exact_pressure - v_val)
+            err = abs(exact_pressure - p_val)
             if err > max_err:
                 max_err = err
         return max_err
@@ -188,25 +188,25 @@ sims_harmonic = [
 vis = anim.FluxAndPressure(sim=sims_harmonic[1])
 vis.show()
 
-v_errors_yee = []
+p_errors_yee = []
 q_errors_yee = []
-v_errors_harmonic = []
+p_errors_harmonic = []
 q_errors_harmonic = []
 for sim in sims_harmonic:
     sim.run_to_end()
-    v_errors_harmonic.append(sim.current_max_pressure_error())
+    p_errors_harmonic.append(sim.current_max_pressure_error())
     q_errors_harmonic.append(sim.current_max_flux_error())
 for sim in sims_yee:
     sim.run_to_end()
-    v_errors_yee.append(sim.current_max_pressure_error())
+    p_errors_yee.append(sim.current_max_pressure_error())
     q_errors_yee.append(sim.current_max_flux_error())
 
 fig = plt.figure()
-v_ax = fig.add_subplot(2, 1, 1)
-v_ax.set(xlabel="mesh element size", ylabel="max error in pressure")
-(plot_yee,) = v_ax.plot(mesh_sizes, v_errors_yee, label="Yee's")
-(plot_har,) = v_ax.plot(mesh_sizes, v_errors_harmonic, label="Harmonic")
-v_ax.legend(handles=[plot_yee, plot_har])
+p_ax = fig.add_subplot(2, 1, 1)
+p_ax.set(xlabel="mesh element size", ylabel="max error in pressure")
+(plot_yee,) = p_ax.plot(mesh_sizes, p_errors_yee, label="Yee's")
+(plot_har,) = p_ax.plot(mesh_sizes, p_errors_harmonic, label="Harmonic")
+p_ax.legend(handles=[plot_yee, plot_har])
 
 w_ax = fig.add_subplot(2, 1, 2)
 w_ax.set(xlabel="mesh element size", ylabel="max error in velocity")
