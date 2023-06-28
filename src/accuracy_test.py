@@ -167,7 +167,9 @@ class AccuracyTest(Simulation):
             q_val = self.q[edge_idx]
             edge = self.complex[1].simplices[edge_idx]
             exact_flux = self._eval_inc_wave_flux(self.t + 0.5 * self.dt, edge)
-            err = abs(exact_flux - q_val)
+            # normalize by edge length
+            edge_len = self.complex[1].primal_volume[edge_idx]
+            err = abs((exact_flux - q_val) / edge_len)
             if err > max_err:
                 max_err = err
         return max_err
@@ -202,14 +204,14 @@ for sim in sims_yee:
 fig = plt.figure()
 v_ax = fig.add_subplot(2, 1, 1)
 v_ax.set(xlabel="mesh element size", ylabel="max error in pressure")
-(plot_yee,) = v_ax.plot(mesh_sizes, v_errors_yee, label="Yee's Hodge")
-(plot_har,) = v_ax.plot(mesh_sizes, v_errors_harmonic, label="Harmonic Hodge")
+(plot_yee,) = v_ax.plot(mesh_sizes, v_errors_yee, label="Yee's")
+(plot_har,) = v_ax.plot(mesh_sizes, v_errors_harmonic, label="Harmonic")
 v_ax.legend(handles=[plot_yee, plot_har])
 
 w_ax = fig.add_subplot(2, 1, 2)
 w_ax.set(xlabel="mesh element size", ylabel="max error in velocity")
-(plot_yee,) = w_ax.plot(mesh_sizes, q_errors_yee, label="Yee's Hodge")
-(plot_har,) = w_ax.plot(mesh_sizes, q_errors_harmonic, label="Harmonic Hodge")
+(plot_yee,) = w_ax.plot(mesh_sizes, q_errors_yee, label="Yee's")
+(plot_har,) = w_ax.plot(mesh_sizes, q_errors_harmonic, label="Harmonic")
 w_ax.legend(handles=[plot_yee, plot_har])
 plt.show()
 fig.savefig("errors.png")
