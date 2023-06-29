@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from utils import animate as anim
 from utils import mesh
 from utils.sim_runner import Simulation
@@ -146,33 +147,31 @@ class AccuracyTest(Simulation):
                 math.cos(wave_angle - kdotp) - math.cos(wave_angle - kdotp - kdotl)
             )
 
-    def current_max_pressure_error(self) -> float:
-        """Find the largest deviation from the analytical plane wave solution's pressure
+    def current_pressure_error(self) -> npt.NDArray[np.float64]:
+        """Get the vector of deviations
+        from the analytical plane wave solution's pressure
         in the current state of the simulation."""
 
-        max_err = 0.0
+        errors = []
         for vert, p_val in zip(self.complex[2].circumcenter, self.p):
             exact_pressure = self._eval_inc_wave_pressure(self.t, vert)
-            err = abs(exact_pressure - p_val)
-            if err > max_err:
-                max_err = err
-        return max_err
+            errors.append(abs(exact_pressure - p_val))
+        return np.array(errors)
 
-    def current_max_flux_error(self) -> float:
-        """Find the largest deviation from the analytical plane wave solution's velocity
+    def current_flux_error(self) -> npt.NDArray[np.float64]:
+        """Get the vector of deviations
+        from the analytical plane wave solution's flux
         in the current state of the simulation."""
 
-        max_err = 0.0
+        errors = []
         for edge_idx in range(len(self.q)):
             q_val = self.q[edge_idx]
             edge = self.complex[1].simplices[edge_idx]
             exact_flux = self._eval_inc_wave_flux(self.t + 0.5 * self.dt, edge)
             # normalize by edge length
             edge_len = self.complex[1].primal_volume[edge_idx]
-            err = abs((exact_flux - q_val) / edge_len)
-            if err > max_err:
-                max_err = err
-        return max_err
+            errors.append(abs((exact_flux - q_val) / edge_len))
+        return np.array(errors)
 
 
 mesh_sizes = [np.pi / n for n in [5, 8, 10, 20, 40]]
@@ -188,30 +187,58 @@ sims_harmonic = [
 vis = anim.FluxAndPressure(sim=sims_harmonic[1])
 vis.show()
 
-p_errors_yee = []
-q_errors_yee = []
-p_errors_harmonic = []
-q_errors_harmonic = []
+p_max_errors_harmonic = []
+q_max_errors_harmonic = []
+p_avg_errors_harmonic = []
+q_avg_errors_harmonic = []
+p_max_errors_yee = []
+q_max_errors_yee = []
+p_avg_errors_yee = []
+q_avg_errors_yee = []
 for sim in sims_harmonic:
     sim.run_to_end()
-    p_errors_harmonic.append(sim.current_max_pressure_error())
-    q_errors_harmonic.append(sim.current_max_flux_error())
+    err_p = sim.current_pressure_error()
+    err_q = sim.current_flux_error()
+    p_max_errors_harmonic.append(max(err_p))
+    q_max_errors_harmonic.append(max(err_q))
+    p_avg_errors_harmonic.append(sum(err_p) / len(err_p))
+    q_avg_errors_harmonic.append(sum(err_q) / len(err_q))
 for sim in sims_yee:
     sim.run_to_end()
-    p_errors_yee.append(sim.current_max_pressure_error())
-    q_errors_yee.append(sim.current_max_flux_error())
+    err_p = sim.current_pressure_error()
+    err_q = sim.current_flux_error()
+    p_max_errors_yee.append(max(err_p))
+    q_max_errors_yee.append(max(err_q))
+    p_avg_errors_yee.append(sum(err_p) / len(err_p))
+    q_avg_errors_yee.append(sum(err_q) / len(err_q))
 
 fig = plt.figure()
 p_ax = fig.add_subplot(2, 1, 1)
-p_ax.set(xlabel="mesh element size", ylabel="max error in pressure")
-(plot_yee,) = p_ax.plot(mesh_sizes, p_errors_yee, label="Yee's")
-(plot_har,) = p_ax.plot(mesh_sizes, p_errors_harmonic, label="Harmonic")
-p_ax.legend(handles=[plot_yee, plot_har])
+p_ax.set(xlabel="mesh element size", ylabel="error in pressure")
+(plot_yee_max,) = p_ax.plot(mesh_sizes, p_max_errors_yee, label="maximum (Yee's)")
+(plot_har_max,) = p_ax.plot(
+    mesh_sizes, p_max_errors_harmonic, label="maximum (harmonic)"
+)
+(plot_yee_avg,) = p_ax.plot(
+    mesh_sizes, p_avg_errors_yee, linestyle="dotted", label="average (Yee's)"
+)
+(plot_har_avg,) = p_ax.plot(
+    mesh_sizes, p_avg_errors_harmonic, linestyle="dotted", label="average (harmonic)"
+)
+p_ax.legend(handles=[plot_yee_max, plot_yee_avg, plot_har_max, plot_har_avg])
 
-w_ax = fig.add_subplot(2, 1, 2)
-w_ax.set(xlabel="mesh element size", ylabel="max error in velocity")
-(plot_yee,) = w_ax.plot(mesh_sizes, q_errors_yee, label="Yee's")
-(plot_har,) = w_ax.plot(mesh_sizes, q_errors_harmonic, label="Harmonic")
-w_ax.legend(handles=[plot_yee, plot_har])
+q_ax = fig.add_subplot(2, 1, 2)
+q_ax.set(xlabel="mesh element size", ylabel="error in velocity")
+(plot_yee_max,) = q_ax.plot(mesh_sizes, q_max_errors_yee, label="maximum (Yee's)")
+(plot_har_max,) = q_ax.plot(
+    mesh_sizes, q_max_errors_harmonic, label="maximum (harmonic)"
+)
+(plot_yee_avg,) = q_ax.plot(
+    mesh_sizes, q_avg_errors_yee, linestyle="dotted", label="average (Yee's)"
+)
+(plot_har_avg,) = q_ax.plot(
+    mesh_sizes, q_avg_errors_harmonic, linestyle="dotted", label="average (harmonic)"
+)
+q_ax.legend(handles=[plot_yee_max, plot_yee_avg, plot_har_max, plot_har_avg])
 plt.show()
-fig.savefig("errors.png")
+# fig.savefig("errors.png")
