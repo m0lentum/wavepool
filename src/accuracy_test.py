@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from utils import animate as anim
 from utils import mesh
 from utils.sim_runner import Simulation

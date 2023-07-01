@@ -18,7 +18,9 @@ class ComplexAndMetadata:
 
 
 def rect_unstructured(
-    mesh_width: float, mesh_height: float, elem_size: float
+    mesh_width: float,
+    mesh_height: float,
+    elem_size: float,
 ) -> ComplexAndMetadata:
     """Create a rectangular triangle mesh with nonuniform triangle placement."""
 
@@ -42,10 +44,49 @@ def rect_unstructured(
     gmsh.model.geo.synchronize()
 
     gmsh.model.mesh.generate(2)
-    # gmsh.model.mesh.refine()
-    # gmsh.model.mesh.optimize("Laplace2D")
 
     return _finalize_mesh_2d()
+
+
+def series_of_unstructured_square_refinements(
+    edge_length: float,
+    elem_size: float,
+    refinement_count: int,
+) -> list[ComplexAndMetadata]:
+    """Create a list of square-shaped triangle meshes
+    with nonuniform triangle placement
+    and progressively increasing refinement level.
+
+    Each subsequent mesh is a refinement of the first,
+    meaning it retains all the original's edges but splits them into shorter edges."""
+
+    gmsh.initialize()
+    gmsh.model.add("rec")
+
+    gmsh.model.geo.addPoint(0, 0, 0, elem_size, 1)
+    gmsh.model.geo.addPoint(edge_length, 0, 0, elem_size, 2)
+    gmsh.model.geo.addPoint(edge_length, edge_length, 0, elem_size, 3)
+    gmsh.model.geo.addPoint(0, edge_length, 0, elem_size, 4)
+
+    gmsh.model.geo.addLine(1, 2, 1)
+    gmsh.model.geo.addLine(2, 3, 2)
+    gmsh.model.geo.addLine(3, 4, 3)
+    gmsh.model.geo.addLine(4, 1, 4)
+
+    gmsh.model.geo.addCurveLoop([1, 2, 3, 4], 1)
+
+    gmsh.model.geo.addPlaneSurface([1], 1)
+
+    gmsh.model.geo.synchronize()
+
+    gmsh.model.mesh.generate(2)
+
+    meshes = [_finalize_mesh_2d(do_finalize=False)]
+    for _ in range(1, refinement_count):
+        gmsh.model.mesh.refine()
+        meshes.append(_finalize_mesh_2d(do_finalize=False))
+    gmsh.finalize()
+    return meshes
 
 
 def square_with_hole(
@@ -276,9 +317,12 @@ def annulus(inner_r: float, outer_r: float, refine_count: int) -> ComplexAndMeta
     return _finalize_mesh_2d()
 
 
-def _finalize_mesh_2d() -> ComplexAndMetadata:
+def _finalize_mesh_2d(do_finalize: bool = True) -> ComplexAndMetadata:
     """Get the active mesh from gmsh and transform it to a PyDEC 2D mesh
-    along with possible edge group information for boundary identification."""
+    along with possible edge group information for boundary identification.
+
+    If `do_finalize=False` is given, leaves the mesh active in gmsh,
+    allowing for modifying and generating another mesh."""
 
     nodes = gmsh.model.mesh.getNodes()
     # reshape into a list of (x, y, z) vectors
@@ -303,7 +347,8 @@ def _finalize_mesh_2d() -> ComplexAndMetadata:
         verts = gmsh.model.mesh.getNodesForPhysicalGroup(dim, tag)[0]
         vert_groups[name] = set([int(vert) - 1 for vert in verts])
 
-    gmsh.finalize()
+    if do_finalize:
+        gmsh.finalize()
 
     mesh = pydec.SimplicialMesh(vertices, edges.astype("int32"))
     complex = pydec.SimplicialComplex(mesh)
