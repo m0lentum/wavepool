@@ -10,9 +10,7 @@ from typing import Iterable
 
 
 class AccuracyTest(Simulation):
-    def __init__(
-        self, elem_size: float, timesteps_per_second: int, use_harmonic_terms: bool
-    ):
+    def __init__(self, elem_size: float, use_harmonic_terms: bool):
         # mesh parameters
         mesh_dim = np.pi
         cmp_mesh = mesh.rect_unstructured(mesh_dim, mesh_dim, elem_size)
@@ -20,7 +18,7 @@ class AccuracyTest(Simulation):
 
         # time parameters
         sim_time = 2.0 * np.pi
-        dt = 1.0 / timesteps_per_second
+        dt = 0.2 * min(cmp_complex[1].primal_volume)
         step_count = math.ceil(sim_time / dt)
 
         super().__init__(complex=cmp_complex, dt=dt, step_count=step_count)
@@ -174,16 +172,10 @@ class AccuracyTest(Simulation):
 
 
 mesh_sizes = [np.pi / n for n in [5, 8, 10, 20, 40]]
-sims_yee = [
-    AccuracyTest(elem_size=n, timesteps_per_second=60, use_harmonic_terms=False)
-    for n in mesh_sizes
-]
-sims_harmonic = [
-    AccuracyTest(elem_size=n, timesteps_per_second=60, use_harmonic_terms=True)
-    for n in mesh_sizes
-]
+sims_yee = [AccuracyTest(elem_size=n, use_harmonic_terms=False) for n in mesh_sizes]
+sims_harmonic = [AccuracyTest(elem_size=n, use_harmonic_terms=True) for n in mesh_sizes]
 
-vis = anim.FluxAndPressure(sim=sims_harmonic[1])
+vis = anim.FluxAndPressure(sim=sims_harmonic[3])
 vis.show()
 
 p_max_errors_harmonic = []

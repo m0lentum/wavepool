@@ -154,7 +154,7 @@ inc_angular_vel = inc_wavenumber * wave_speed
 # it's important the simulated time range
 # coincides with the period the incident wave
 wave_period = (2.0 * np.pi) / inc_angular_vel
-dt = np.pi / 120.0
+dt = 0.1 * min(cmp_complex[1].primal_volume)
 steps_per_period = math.ceil(wave_period / dt)
 
 # time stepping matrices
@@ -360,10 +360,6 @@ def eval_inc_wave_everywhere(t: float) -> State:
         )
     return state
 
-
-# State().draw()
-# plt.show()
-# exit()
 
 #
 # simulation solver

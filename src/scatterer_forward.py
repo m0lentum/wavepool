@@ -53,7 +53,8 @@ class CircleScatterer(Simulation):
 
         # time parameters
         sim_time = 10.0 * np.pi
-        dt = 1.0 / 20.0
+        print(min(cmp_complex[1].primal_volume))
+        dt = 0.2 * min(cmp_complex[1].primal_volume)
         step_count = math.ceil(sim_time / dt)
 
         # time stepping matrices

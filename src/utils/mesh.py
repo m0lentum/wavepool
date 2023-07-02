@@ -45,6 +45,8 @@ def rect_unstructured(
 
     gmsh.model.mesh.generate(2)
 
+    gmsh.model.mesh.optimize("Laplace2D")
+
     return _finalize_mesh_2d()
 
 
@@ -80,6 +82,8 @@ def series_of_unstructured_square_refinements(
     gmsh.model.geo.synchronize()
 
     gmsh.model.mesh.generate(2)
+
+    gmsh.model.mesh.optimize("Laplace2D")
 
     meshes = [_finalize_mesh_2d(do_finalize=False)]
     for _ in range(1, refinement_count):
