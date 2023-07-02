@@ -6,19 +6,15 @@ import numpy as np
 import numpy.typing as npt
 import math
 import matplotlib.pyplot as plt
+import pydec
 from typing import Iterable
 
 
 class AccuracyTest(Simulation):
-    def __init__(self, elem_size: float, use_harmonic_terms: bool):
-        # mesh parameters
-        mesh_dim = np.pi
-        cmp_mesh = mesh.rect_unstructured(mesh_dim, mesh_dim, elem_size)
-        cmp_complex = cmp_mesh.complex
-
+    def __init__(self, cmp_complex: pydec.SimplicialComplex, use_harmonic_terms: bool):
         # time parameters
         sim_time = 2.0 * np.pi
-        dt = 0.2 * min(cmp_complex[1].primal_volume)
+        dt = 0.3 * min(cmp_complex[1].primal_volume)
         step_count = math.ceil(sim_time / dt)
 
         super().__init__(complex=cmp_complex, dt=dt, step_count=step_count)
@@ -167,16 +163,30 @@ class AccuracyTest(Simulation):
             exact_flux = self._eval_inc_wave_flux(self.t + 0.5 * self.dt, edge)
             # normalize by edge length
             edge_len = self.complex[1].primal_volume[edge_idx]
-            errors.append(abs((exact_flux - q_val) / edge_len))
+            errors.append(abs(exact_flux - q_val) / edge_len)
         return np.array(errors)
 
 
-mesh_sizes = [np.pi / n for n in [5, 8, 10, 20, 40]]
-sims_yee = [AccuracyTest(elem_size=n, use_harmonic_terms=False) for n in mesh_sizes]
-sims_harmonic = [AccuracyTest(elem_size=n, use_harmonic_terms=True) for n in mesh_sizes]
+print("Generating meshes...")
 
-vis = anim.FluxAndPressure(sim=sims_harmonic[3])
+meshes = mesh.series_of_unstructured_square_refinements(
+    edge_length=np.pi, elem_size=np.pi / 6.0, refinement_count=4
+)
+mesh_sizes = [max(mesh.complex[1].primal_volume) for mesh in meshes]
+
+print("Preparing simulations...")
+
+sims_yee = [
+    AccuracyTest(cmp_complex=mesh.complex, use_harmonic_terms=False) for mesh in meshes
+]
+sims_harmonic = [
+    AccuracyTest(cmp_complex=mesh.complex, use_harmonic_terms=True) for mesh in meshes
+]
+
+vis = anim.FluxAndPressure(sim=sims_harmonic[1])
 vis.show()
+
+print("Running simulations...")
 
 p_max_errors_harmonic = []
 q_max_errors_harmonic = []
@@ -203,12 +213,23 @@ for sim in sims_yee:
     p_avg_errors_yee.append(sum(err_p) / len(err_p))
     q_avg_errors_yee.append(sum(err_q) / len(err_q))
 
+p_relative_errors = ", ".join(
+    [f"{har / yee:1.3f}" for har, yee in zip(p_max_errors_harmonic, p_max_errors_yee)]
+)
+q_relative_errors = ", ".join(
+    [f"{har / yee:1.3f}" for har, yee in zip(q_max_errors_harmonic, q_max_errors_yee)]
+)
+print(f"relative differences in pressure error: {p_relative_errors}")
+print(f"relative differences in flux error: {q_relative_errors}")
+
+# plot results
+
 fig = plt.figure()
 p_ax = fig.add_subplot(2, 1, 1)
-p_ax.set(xlabel="mesh element size", ylabel="error in pressure")
-(plot_yee_max,) = p_ax.plot(mesh_sizes, p_max_errors_yee, label="maximum (Yee's)")
+p_ax.set(xlabel="maximum mesh edge length", ylabel="error in pressure")
+(plot_yee_max,) = p_ax.plot(mesh_sizes, p_max_errors_yee, "-o", label="maximum (Yee's)")
 (plot_har_max,) = p_ax.plot(
-    mesh_sizes, p_max_errors_harmonic, label="maximum (harmonic)"
+    mesh_sizes, p_max_errors_harmonic, "-o", label="maximum (harmonic)"
 )
 (plot_yee_avg,) = p_ax.plot(
     mesh_sizes, p_avg_errors_yee, linestyle="dotted", label="average (Yee's)"
@@ -219,10 +240,10 @@ p_ax.set(xlabel="mesh element size", ylabel="error in pressure")
 p_ax.legend(handles=[plot_yee_max, plot_yee_avg, plot_har_max, plot_har_avg])
 
 q_ax = fig.add_subplot(2, 1, 2)
-q_ax.set(xlabel="mesh element size", ylabel="error in velocity")
-(plot_yee_max,) = q_ax.plot(mesh_sizes, q_max_errors_yee, label="maximum (Yee's)")
+q_ax.set(xlabel="maximum mesh edge length", ylabel="error in velocity")
+(plot_yee_max,) = q_ax.plot(mesh_sizes, q_max_errors_yee, "-o", label="maximum (Yee's)")
 (plot_har_max,) = q_ax.plot(
-    mesh_sizes, q_max_errors_harmonic, label="maximum (harmonic)"
+    mesh_sizes, q_max_errors_harmonic, "-o", label="maximum (harmonic)"
 )
 (plot_yee_avg,) = q_ax.plot(
     mesh_sizes, q_avg_errors_yee, linestyle="dotted", label="average (Yee's)"
@@ -232,4 +253,3 @@ q_ax.set(xlabel="mesh element size", ylabel="error in velocity")
 )
 q_ax.legend(handles=[plot_yee_max, plot_yee_avg, plot_har_max, plot_har_avg])
 plt.show()
-# fig.savefig("errors.png")
