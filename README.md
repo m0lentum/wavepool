@@ -79,29 +79,29 @@ for a list of parameters.
 Here are a few animated results
 along with the commands that produced them:
 
-**square**
-
-![A time-harmonic wave scattered by a square](docs/square.gif)
+#### square
 
 `python src/scatterer_control.py --shape square --save-visuals`
 
-**eight-pointed star**
+![A time-harmonic wave scattered by a square](docs/square.gif)
 
-![A time-harmonic wave scattered by an eight-pointed star](docs/star8.gif)
+#### eight-pointed star
 
 `python src/scatterer_control.py --shape star --star-points 8 --save-visuals`
 
-**twelve-pointed star**
+![A time-harmonic wave scattered by an eight-pointed star](docs/star8.gif)
 
-![A time-harmonic wave scattered by a twelve-pointed star](docs/star12.gif)
+#### twelve-pointed star
 
 `python src/scatterer_control.py --shape star --star-points 12 --mesh-scaling 2 --wavenumber 2 --save-visuals`
 
-**diamonds**
+![A time-harmonic wave scattered by a twelve-pointed star](docs/star12.gif)
 
-![A time-harmonic wave scattered by a lattice of diamonds](docs/diamonds.gif)
+#### diamonds
 
 `python src/scatterer_control.py --shape diamonds --save-visuals`
+
+![A time-harmonic wave scattered by a lattice of diamonds](docs/diamonds.gif)
 
 ## Running the code
 
