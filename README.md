@@ -1,3 +1,5 @@
+![A time-harmonic wave scattered by a twelve-pointed star](docs/star12.gif)
+
 This repository contains research work for my master's thesis.
 I use Discrete Exterior Calculus (DEC)
 to simulate acoustic wave scattering in a two-dimensional setting
@@ -44,6 +46,13 @@ and computed using DEC in the interior of the domain.
 Results are compared to the analytical solution (i.e. $\phi$)
 to assess the accuracy of the DEC and its dependence on mesh element size.
 
+### stability_test.py
+
+The same scenario as `accuracy_test.py`,
+but instead of measuring accuracy,
+we search for the highest stable timestep length
+and examine how it relates to mesh element size.
+
 ### scatterer_forward.py
 
 The same plane wave $\phi$ used in `accuracy_test.py`
@@ -62,6 +71,37 @@ $$
 The same scenario as `scatterer_forward.py`.
 Additionally, the exact controllability method is used
 to drive the simulation into a time-periodic state.
+This is the most complicated test case
+and features a number of command line parameters.
+Run `python src/scatterer_control.py --help`
+for a list of parameters.
+
+Here are a few animated results
+along with the commands that produced them:
+
+**square**
+
+![A time-harmonic wave scattered by a square](docs/square.gif)
+
+`python src/scatterer_control.py --shape square --save-visuals`
+
+**eight-pointed star**
+
+![A time-harmonic wave scattered by an eight-pointed star](docs/star8.gif)
+
+`python src/scatterer_control.py --shape star --star-points 8 --save-visuals`
+
+**twelve-pointed star**
+
+![A time-harmonic wave scattered by a twelve-pointed star](docs/star12.gif)
+
+`python src/scatterer_control.py --shape star --star-points 12 --mesh-scaling 2 --wavenumber 2 --save-visuals`
+
+**diamonds**
+
+![A time-harmonic wave scattered by a lattice of diamonds](docs/diamonds.gif)
+
+`python src/scatterer_control.py --shape diamonds --save-visuals`
 
 ## Running the code
 
