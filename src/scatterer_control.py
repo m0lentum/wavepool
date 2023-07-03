@@ -12,6 +12,9 @@ import scipy.sparse as sps
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
+# default figure size for saving
+plt.rcParams["figure.figsize"] = [7, 7]
+
 #
 # command line parameters
 #
@@ -65,10 +68,10 @@ arg_parser.add_argument(
     help="hide the incident wave in the animated visualization",
 )
 arg_parser.add_argument(
-    "--save-gif",
-    dest="save_gif",
+    "--save-visuals",
+    dest="save_visuals",
     action="store_true",
-    help="save an animated .gif of the solution",
+    help="save still images used in the thesis as .pdf and animated visualization as .gif",
 )
 args = arg_parser.parse_args()
 
@@ -276,22 +279,31 @@ class State:
     def __neg__(self):
         return State(pressure=-self.pressure, flux=-self.flux)
 
-    def draw(self):
+    def draw(self, save: bool = False):
         """Draw a still image of the state.
         Remember to also call `plt.show()` after."""
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
         self._draw(ax)
+        if save:
+            fig.savefig("state.pdf")
 
-    def _draw(self, ax: plt.Axes, vlims: list[int] = [-1, 1], draw_velocity=True):
+    def _draw(
+        self,
+        ax: plt.Axes,
+        vlims: list[int] = [-1, 1],
+        draw_velocity: bool = True,
+    ):
         ax.tripcolor(
             cmp_complex.vertices[:, 0],
             cmp_complex.vertices[:, 1],
             triangles=cmp_complex.simplices,
             facecolors=self.pressure,
             edgecolors="k",
-            vmin=vlims[0],
-            vmax=vlims[1],
+            # scale vlims and velocity arrows by wavenumber
+            # because the range of the variables depends on it
+            vmin=inc_wavenumber * vlims[0],
+            vmax=inc_wavenumber * vlims[1],
         )
         if draw_velocity:
             barys, arrows = pydec.simplex_quivers(cmp_complex, self.flux)
@@ -303,7 +315,7 @@ class State:
                 arrows[:, 1],
                 units="dots",
                 width=1,
-                scale=1.0 / 15.0,
+                scale=inc_wavenumber / 15.0,
             )
 
     def save_anim(
@@ -629,6 +641,8 @@ x_axis_yee = range(results_yee.step_count + 1)
     x_axis_yee, results_yee.forward_energies, label="forward (Yee)"
 )
 ax.legend(handles=[plot_ctl_har, plot_fwd_har, plot_ctl_yee, plot_fwd_yee])
+if args.save_visuals:
+    fig.savefig("convergence.pdf")
 plt.show()
 
 fig = plt.figure()
@@ -665,7 +679,7 @@ ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
 ax.plot(x_axis_har, results_harmonic.a_inner_prods)
 plt.show()
 
-results_harmonic.state.draw()
+results_harmonic.state.draw(save=args.save_visuals)
 plt.show()
-if args.save_gif:
+if args.save_visuals:
     results_harmonic.state.save_anim(with_incident_wave=not args.no_inc_wave)
