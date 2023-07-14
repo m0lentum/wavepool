@@ -1,20 +1,14 @@
 ![A time-harmonic wave scattered by a twelve-pointed star](docs/star12.gif)
 
-This repository contains research work for my master's thesis.
-I use Discrete Exterior Calculus (DEC)
-to simulate acoustic wave scattering in a two-dimensional setting
-and the exact controllability method
-to the simulation into a time-periodic state.
+This repository contains research work for my master's thesis
+"Discrete Exterior Calculus and Exact Controllability
+for Time-Harmonic Acoustic Wave Simulation"
+(TODO: add a link to the thesis once published).
+This repo only contains brief descriptions of the simulated scenarios;
+see the thesis for a tutorial on the methods used and discussion of results.
 
 The simulations are implemented using the Python library [PyDEC]
 by Nathan Bell and Anil N. Hirani.
-
-## Brief summary of theory
-
-TODO
-
-More information can be found in the thesis (TODO: add link once published.
-For now, curious readers can check out [my notes][notes]).
 
 ## Simulations in this repo
 
@@ -113,7 +107,6 @@ and `./pydec` added to your `PYTHONPATH`.
 See `shell.nix` for exact dependencies.
 
 Remember to run `git submodule init && git submodule update` after cloning the
-repo to get PyDEC.
+repo or clone with the `--recursive` option to get PyDEC.
 
 [pydec]: https://github.com/hirani/pydec
-[notes]: https://github.com/m0lentum/notes/blob/main/Coursework/Master's%20thesis%20-%20Notes.md
