@@ -2,12 +2,26 @@ from utils import animate as anim
 from utils import mesh
 from utils.sim_runner import Simulation
 
+import argparse
 import numpy as np
 import numpy.typing as npt
 import math
 import matplotlib.pyplot as plt
 import pydec
 from typing import Iterable
+
+# figure size with a good font size for thesis embedding
+plt.rcParams["figure.figsize"] = [6, 6]
+
+# command line parameters
+arg_parser = argparse.ArgumentParser(prog="accuracy_test")
+arg_parser.add_argument(
+    "--save-visuals",
+    dest="save_visuals",
+    action="store_true",
+    help="save still images used in the thesis as .pdf",
+)
+args = arg_parser.parse_args()
 
 
 class AccuracyTest(Simulation):
@@ -226,7 +240,7 @@ print(f"relative differences in flux error: {q_relative_errors}")
 
 fig = plt.figure()
 p_ax = fig.add_subplot(2, 1, 1)
-p_ax.set(xlabel="maximum mesh edge length", ylabel="error in pressure")
+p_ax.set(xlabel="", ylabel="error in pressure")
 (plot_yee_max,) = p_ax.plot(mesh_sizes, p_max_errors_yee, "-o", label="maximum (Yee's)")
 (plot_har_max,) = p_ax.plot(
     mesh_sizes, p_max_errors_harmonic, "-o", label="maximum (harmonic)"
@@ -252,4 +266,6 @@ q_ax.set(xlabel="maximum mesh edge length", ylabel="error in velocity")
     mesh_sizes, q_avg_errors_harmonic, linestyle="dotted", label="average (harmonic)"
 )
 q_ax.legend(handles=[plot_yee_max, plot_yee_avg, plot_har_max, plot_har_avg])
+if args.save_visuals:
+    fig.savefig("accuracy_test_errors.pdf")
 plt.show()

@@ -1,13 +1,23 @@
-from dataclasses import dataclass
-from utils import mesh
-
+import argparse
 import numpy as np
 import numpy.typing as npt
 import math
 import matplotlib.pyplot as plt
 import pydec
+from dataclasses import dataclass
 from typing import Iterable
 
+from utils import mesh
+
+# command line parameters
+arg_parser = argparse.ArgumentParser(prog="stability_test")
+arg_parser.add_argument(
+    "--save-visuals",
+    dest="save_visuals",
+    action="store_true",
+    help="save still images used in the thesis as .pdf",
+)
+args = arg_parser.parse_args()
 
 # incident wave parameters
 inc_wavenumber = 2.0
@@ -165,7 +175,7 @@ safe_slope = lowest_slope - 0.05
 
 # plot the meshes
 
-fig = plt.figure()
+fig = plt.figure(figsize=[5, 5])
 ax = plt.subplot(1, 1, 1)
 for i in reversed(range(len(test_setups))):
     setup = test_setups[i]
@@ -175,11 +185,13 @@ for i in reversed(range(len(test_setups))):
         triangles=setup.cmp_complex.simplices,
         color=(0, 0.5, 1.0, (1.0 - i * 0.2) ** 2) if i > 0 else (0, 0, 0, 1),
     )
+if args.save_visuals:
+    fig.savefig("stability_test_meshes.pdf")
 plt.show()
 
 # plot the results
 
-fig = plt.figure()
+fig = plt.figure(figsize=[5, 4])
 ax = plt.subplot(1, 1, 1)
 ax.set(xlabel="minimum edge length", ylabel="maximum stable dt")
 ax.scatter(lowest_edge_lengths, stable_dts, s=80)
@@ -191,4 +203,6 @@ end_x = lowest_edge_lengths[0] + 0.05
     label=f"dt = {safe_slope:1.2f}h",
 )
 ax.legend(handles=[plt_slope])
+if args.save_visuals:
+    fig.savefig("stability_test_coefficients.pdf")
 plt.show()

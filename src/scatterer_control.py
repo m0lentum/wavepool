@@ -12,8 +12,8 @@ import scipy.sparse as sps
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
-# default figure size for saving
-plt.rcParams["figure.figsize"] = [7, 7]
+# figure size with a good font size for thesis embedding
+plt.rcParams["figure.figsize"] = [5, 5]
 
 #
 # command line parameters
