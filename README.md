@@ -1,9 +1,8 @@
 ![A time-harmonic wave scattered by a twelve-pointed star](docs/star12.gif)
 
 This repository contains research work for my master's thesis
-"Discrete Exterior Calculus and Exact Controllability
-for Time-Harmonic Acoustic Wave Simulation"
-(TODO: add a link to the thesis once published).
+"[Discrete Exterior Calculus and Exact Controllability
+for Time-Harmonic Acoustic Wave Simulation](https://jyx.jyu.fi/handle/123456789/89358)".
 This repo only contains brief descriptions of the simulated scenarios;
 see the thesis for a tutorial on the methods used and discussion of results.
 
