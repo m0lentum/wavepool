@@ -24,6 +24,7 @@ in
 pkgs.mkShell {
   buildInputs = with pkgs; [
     niv
+    ffmpeg
     python
     gmsh
   ];
