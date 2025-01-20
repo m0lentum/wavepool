@@ -1,0 +1,16 @@
+Shape,Edge count,Timesteps per iteration,Time per iteration (ms)
+square,556,80,18
+square,2120,158,59
+square,8098,333,227
+square,31559,660,964
+star_8,753,124,88
+star_8,2377,187,205
+star_8,8382,373,708
+star_8,30964,718,2629
+star_12,2520,99,154
+star_12,8628,187,515
+star_12,32220,353,1841
+diamonds,684,99,117
+diamonds,1913,174,330
+diamonds,7081,371,1380
+diamonds,27389,776,5815

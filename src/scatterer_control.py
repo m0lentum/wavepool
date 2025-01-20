@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import pydec
 import scipy.sparse as sps
 from dataclasses import dataclass
+from time import perf_counter_ns
 from typing import Callable, Iterable
 
 # figure size with a good font size for thesis embedding
@@ -165,9 +166,9 @@ steps_per_period = math.ceil(wave_period / dt)
 p_step_mat_yee = dt * wave_speed**2 * cmp_complex[2].star * cmp_complex[1].d
 q_step_mat_yee = dt * cmp_complex[1].star_inv * cmp_complex[1].d.T
 
-# harmonic timestepping
-
 print("Computing harmonic timestep operators...")
+
+# harmonic timestepping
 
 wavenumber_sq = inc_wavenumber**2
 star_1_inv_diag = cmp_complex[1].star_inv.diagonal()
@@ -514,6 +515,10 @@ class SolveResults:
     # this is supposed to be zero at all times,
     # but may not be if the mesh isn't good enough
     a_inner_prods: list[float]
+    # time it took to compute the controllability solution
+    control_time_ms: int
+    # time it took to comtute the reference forward solution
+    forward_time_ms: int
 
 
 def solve():
@@ -553,9 +558,13 @@ def solve():
         forward_energies=[],
         resid_norms=[math.sqrt(initial_resid_norm_sq)],
         a_inner_prods=[0.0],
+        control_time_ms=0,
+        forward_time_ms=0,
     )
 
     print("Computing exact controllability solution...")
+
+    start_time = perf_counter_ns()
 
     for _ in range(args.max_iters):
         resid_update = compute_cost_gradient(
@@ -580,6 +589,8 @@ def solve():
             print("Converged within step limit!")
             break
 
+    control_done_time = perf_counter_ns()
+
     print("Computing reference forward solution...")
 
     # compute energy of forward simulation over `max_iterations` time periods
@@ -591,6 +602,11 @@ def solve():
             period_sim.step()
         results.forward_energies.append((period_sim.state - forward_state).energy())
         forward_state = period_sim.state
+
+    forward_done_time = perf_counter_ns()
+
+    results.control_time_ms = (control_done_time - start_time) / 1e6
+    results.forward_time_ms = (forward_done_time - control_done_time) / 1e6
 
     return results
 
@@ -621,6 +637,20 @@ print(f"Yee solution's final energy: {results_yee.control_energies[-1]}")
 print(f"Harmonic solution's final energy: {results_harmonic.control_energies[-1]}")
 print(f"Yee solution's energy computed with harmonic timestepping: {yee_energy_har}")
 
+# time measurements
+
+tps_yee_control = results_yee.control_time_ms / results_yee.step_count
+tps_yee_forward = results_yee.forward_time_ms / results_yee.step_count
+tps_har_control = results_harmonic.control_time_ms / results_harmonic.step_count
+tps_har_forward = results_harmonic.forward_time_ms / results_harmonic.step_count
+print("")
+print(f"Edge count: {cmp_complex[1].num_simplices}")
+print(f"Timesteps per iteration: {steps_per_period}")
+print("Time per iteration:")
+print(f"Yee, control: {tps_yee_control:.0f} ms")
+print(f"Yee, forward: {tps_yee_forward:.0f} ms")
+print(f"Harmonic, control: {tps_har_control:.0f} ms")
+print(f"Harmonic, forward: {tps_har_forward:.0f} ms")
 
 fig = plt.figure()
 ax = fig.add_subplot(1, 1, 1)
