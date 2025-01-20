@@ -658,17 +658,29 @@ ax.set(xlabel="iteration count", ylabel="control energy")
 ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
 x_axis_har = range(results_harmonic.step_count + 1)
 x_axis_yee = range(results_yee.step_count + 1)
-(plot_ctl_har,) = ax.plot(
-    x_axis_har, results_harmonic.control_energies, label="control (harmonic)"
+(plot_ctl_har,) = ax.semilogy(
+    x_axis_har,
+    results_harmonic.control_energies,
+    label="control (harmonic)",
+    marker="o",
 )
-(plot_fwd_har,) = ax.plot(
-    x_axis_har, results_harmonic.forward_energies, label="forward (harmonic)"
+(plot_fwd_har,) = ax.semilogy(
+    x_axis_har,
+    results_harmonic.forward_energies,
+    label="forward (harmonic)",
+    marker="d",
 )
-(plot_ctl_yee,) = ax.plot(
-    x_axis_yee, results_yee.control_energies, label="control (Yee)"
+(plot_ctl_yee,) = ax.semilogy(
+    x_axis_yee,
+    results_yee.control_energies,
+    label="control (generic)",
+    marker="x",
 )
-(plot_fwd_yee,) = ax.plot(
-    x_axis_yee, results_yee.forward_energies, label="forward (Yee)"
+(plot_fwd_yee,) = ax.semilogy(
+    x_axis_yee,
+    results_yee.forward_energies,
+    label="forward (generic)",
+    marker="+",
 )
 ax.legend(handles=[plot_ctl_har, plot_fwd_har, plot_ctl_yee, plot_fwd_yee])
 if args.save_visuals:
