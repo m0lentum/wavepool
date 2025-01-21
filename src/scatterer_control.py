@@ -39,7 +39,14 @@ arg_parser.add_argument(
     dest="mesh_scaling",
     type=float,
     default=1.0,
-    help="number to divide default mesh element size by",
+    help="scaling factor for the mesh dimensions",
+)
+arg_parser.add_argument(
+    "--triangle-scaling",
+    dest="triangle_scaling",
+    type=float,
+    default=1.0,
+    help="scaling factor for triangles size",
 )
 arg_parser.add_argument(
     "--max-iters",
@@ -82,27 +89,28 @@ args = arg_parser.parse_args()
 
 if args.shape == "square":
     cmp_mesh = mesh.square_with_hole(
-        outer_extent=np.pi * 2.0,
-        inner_extent=np.pi / 3.0,
-        elem_size=np.pi / (3.0 * args.mesh_scaling),
+        outer_extent=args.mesh_scaling * np.pi * 2.0,
+        inner_extent=args.mesh_scaling * np.pi / 3.0,
+        elem_size=args.triangle_scaling * np.pi / 3.0,
     )
 elif args.shape == "star":
     cmp_mesh = mesh.star(
         point_count=args.star_points,
-        inner_r=np.pi / 3.0,
-        outer_r=np.pi,
-        domain_r=np.pi * 2.0,
-        elem_size=np.pi / (3.0 * args.mesh_scaling),
+        inner_r=args.mesh_scaling * np.pi / 3.0,
+        outer_r=args.mesh_scaling * np.pi,
+        domain_r=args.mesh_scaling * np.pi * 2.0,
+        elem_size=args.triangle_scaling * np.pi / 3.0,
     )
 elif args.shape == "diamonds" or args.shape == "diamonds_bad":
     cmp_mesh = mesh.diamond_lattice(
-        domain_radius=np.pi * 2.0,
+        domain_radius=args.mesh_scaling * np.pi * 2.0,
         horizontal_divs=4,
         vertical_divs=2,
         # diamonds_bad has gap size smaller than element size,
         # making narrow triangles that cause instability
-        gap_size=np.pi / 3.0 if args.shape != "diamonds_bad" else np.pi / 6.0,
-        elem_size=np.pi / (3.0 * args.mesh_scaling),
+        gap_size=args.mesh_scaling
+        * (np.pi / 3.0 if args.shape != "diamonds_bad" else np.pi / 6.0),
+        elem_size=args.triangle_scaling * np.pi / 3.0,
     )
 else:
     # unreachable because argparse will throw an error,
