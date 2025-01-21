@@ -241,29 +241,49 @@ print(f"relative differences in flux error: {q_relative_errors}")
 fig = plt.figure()
 p_ax = fig.add_subplot(2, 1, 1)
 p_ax.set(xlabel="", ylabel="error in pressure")
-(plot_yee_max,) = p_ax.plot(mesh_sizes, p_max_errors_yee, "-o", label="maximum (Yee's)")
+(plot_yee_max,) = p_ax.plot(
+    mesh_sizes, p_max_errors_yee, marker="x", label="maximum (generic)"
+)
 (plot_har_max,) = p_ax.plot(
-    mesh_sizes, p_max_errors_harmonic, "-o", label="maximum (harmonic)"
+    mesh_sizes, p_max_errors_harmonic, marker="o", label="maximum (harmonic)"
 )
 (plot_yee_avg,) = p_ax.plot(
-    mesh_sizes, p_avg_errors_yee, linestyle="dotted", label="average (Yee's)"
+    mesh_sizes,
+    p_avg_errors_yee,
+    marker="x",
+    linestyle="dotted",
+    label="average (generic)",
 )
 (plot_har_avg,) = p_ax.plot(
-    mesh_sizes, p_avg_errors_harmonic, linestyle="dotted", label="average (harmonic)"
+    mesh_sizes,
+    p_avg_errors_harmonic,
+    linestyle="dotted",
+    marker="o",
+    label="average (harmonic)",
 )
 p_ax.legend(handles=[plot_yee_max, plot_yee_avg, plot_har_max, plot_har_avg])
 
 q_ax = fig.add_subplot(2, 1, 2)
 q_ax.set(xlabel="maximum mesh edge length", ylabel="error in velocity")
-(plot_yee_max,) = q_ax.plot(mesh_sizes, q_max_errors_yee, "-o", label="maximum (Yee's)")
+(plot_yee_max,) = q_ax.plot(
+    mesh_sizes, q_max_errors_yee, marker="x", label="maximum (generic)"
+)
 (plot_har_max,) = q_ax.plot(
-    mesh_sizes, q_max_errors_harmonic, "-o", label="maximum (harmonic)"
+    mesh_sizes, q_max_errors_harmonic, marker="o", label="maximum (harmonic)"
 )
 (plot_yee_avg,) = q_ax.plot(
-    mesh_sizes, q_avg_errors_yee, linestyle="dotted", label="average (Yee's)"
+    mesh_sizes,
+    q_avg_errors_yee,
+    linestyle="dotted",
+    marker="x",
+    label="average (generic)",
 )
 (plot_har_avg,) = q_ax.plot(
-    mesh_sizes, q_avg_errors_harmonic, linestyle="dotted", label="average (harmonic)"
+    mesh_sizes,
+    q_avg_errors_harmonic,
+    linestyle="dotted",
+    marker="o",
+    label="average (harmonic)",
 )
 q_ax.legend(handles=[plot_yee_max, plot_yee_avg, plot_har_max, plot_har_avg])
 if args.save_visuals:
