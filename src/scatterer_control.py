@@ -13,8 +13,9 @@ from dataclasses import dataclass
 from time import perf_counter_ns
 from typing import Callable, Iterable
 
-# figure size with a good font size for thesis embedding
-plt.rcParams["figure.figsize"] = [5, 5]
+# figure size with a good font size for embedding
+plt.rcParams["figure.figsize"] = [6, 6]
+plt.rcParams.update({"font.size": 14})
 
 #
 # command line parameters
